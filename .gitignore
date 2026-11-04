@@ -17,3 +17,17 @@ update-login-roles.mjs
 update-password-flow.mjs
 finish-password-profile.mjs
 server/prepare-ui-qa.mjs
+upgrade-rooms-approvals.mjs
+connect-modern-ui.mjs
+update-feature-tests.mjs
+
+workflow-update.mjs
+ui-update.mjs
+pages-update.mjs
+dashboard-update.mjs
+admin-update.mjs
+polish-update.mjs
+fixes-update.mjs
+final-update.mjs
+
+*.key.txt

@@ -1,3 +1,4 @@
+import { ItemIcon } from './catalog-controls';
 import { askText } from "@/components/text-prompt";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -30,6 +31,7 @@ export function AuditBoard() {
   const startAudit=useRegister(s=>s.startAudit);
   const finishAudit=useRegister(s=>s.finishAudit);
   const markAudit=useRegister(s=>s.markAudit);
+  const updateRoom=useRegister(s=>s.updateRoom);
   const [slot, setSlot] = useState<{ personId: string; kind: string } | null>(null);
   const [loose, setLoose] = useState<Asset | null>(null);
 
@@ -63,7 +65,7 @@ export function AuditBoard() {
             <Card>
               <CardContent className="grid gap-3 p-4">
                 <div>
-                  <p className="font-medium">{person.name}</p>
+                  <div className="flex flex-wrap items-center justify-between gap-2"><p className="font-medium">{person.name}</p><button className="room-chip" onClick={async()=>{const room=await askText(`Room for ${person.name}`,person.room||"");if(room!==null){await updateRoom(person.id,room);toast.success("Room updated for all assigned assets");}}}>Room {person.room||"Not set"} · Edit</button></div>
                   <p className="text-sm text-muted-foreground">
                     {person.personnelNo || "No personnel no."} · {person.designation}
                   </p>
@@ -78,7 +80,7 @@ export function AuditBoard() {
                         onClick={() => setSlot({ personId: person.id, kind })}
                         className="rounded-xl bg-muted px-3 py-3 text-left transition-colors hover:bg-accent"
                       >
-                        <p className="text-xs font-medium text-muted-foreground">{kind}</p>
+                        <p className="flex items-center gap-2 text-xs font-medium text-muted-foreground"><ItemIcon name={kind} className="size-4"/>{kind}</p>
                         {asset ? (
                           <>
                             <p className="mt-1 font-medium">{asset.assetNo}</p>
@@ -150,7 +152,7 @@ function consequences(assets: Asset[], asset: Asset, toHolderId: string | null, 
       lines.push(`${asset.assetNo} will be unallocated. The number stays in the register with no person.`);
     }
   } else {
-    lines.push("Same person. Only the room number changes.");
+    lines.push("Same person. The room follows this person's record; use the room badge to update it for all their assets.");
   }
   return lines;
 }
@@ -219,10 +221,11 @@ function SlotDialog({
               </SelectContent>
             </Select>
           </Field>
-          <Field label="Room number" htmlFor="au-room">
+          <Field label="Room · follows person" htmlFor="au-room">
             <Input
               id="au-room"
-              value={room}
+              disabled
+              value={person?.room || "Room not set"}
               onChange={(e) => setRoom(e.target.value)}
               placeholder="EE cabin"
             />
@@ -305,8 +308,8 @@ function LooseDialog({ asset, onClose }: { asset: Asset | null; onClose: () => v
               </SelectContent>
             </Select>
           </Field>
-          <Field label="Room number" htmlFor="au-loose-room">
-            <Input id="au-loose-room" value={room} onChange={(e) => setRoom(e.target.value)} />
+          <Field label="Room · follows person" htmlFor="au-loose-room">
+            <Input id="au-loose-room" disabled value={people.find(p=>p.id===personId)?.room||"Room not set"} onChange={(e) => setRoom(e.target.value)} />
           </Field>
           {preview.length > 0 ? (
             <ul className="space-y-1 rounded-xl bg-muted px-3 py-3 text-sm text-muted-foreground">

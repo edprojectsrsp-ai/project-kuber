@@ -1,6 +1,7 @@
+import { ItemIcon,CatalogSelect } from '@/components/catalog-controls';
 import { useSession } from "@/lib/session";
 import { MyAssets } from "@/components/employee-home";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { ArrowLeftRight, MonitorSmartphone, Plus } from "lucide-react";
 import { toast } from "sonner";
@@ -29,11 +30,14 @@ import { formatDate, formatDateTime } from "@/lib/format";
 import { personName, useRegister } from "@/lib/store/use-register";
 import { ASSET_KINDS, type Asset } from "@/lib/store/types";
 
-export const Route = createFileRoute("/assets")({ component: AssetsPage });
+export const Route = createFileRoute("/assets")({ validateSearch:(s:Record<string,unknown>):{view?:string}=>({view:s.view==="store"?"store":undefined}), component: AssetsPage });
 
 function AssetsPage() {
   const assets = useRegister((s) => s.assets);
+  const kinds=useRegister(s=>s.catalogs?.assetKinds||[...ASSET_KINDS]);
   const people = useRegister((s) => s.people);
+  const {view}=Route.useSearch();
+  useEffect(()=>{setHolder(view==="store"?"store":"all");if(view==="store")setMode("register");},[view]);
   const [q, setQ] = useState("");
   const [kind, setKind] = useState("all");
   const [holder, setHolder] = useState("all");
@@ -50,7 +54,7 @@ function AssetsPage() {
       .filter((a) => (kind === "all" ? true : a.kind === kind))
       .filter((a) => {
         if (holder === "all") return true;
-        if (holder === "store") return !a.holderId;
+        if (holder === "store") return !a.holderId && a.status !== "condemned";
         return a.holderId === holder;
       })
       .filter((a) => {
@@ -99,19 +103,7 @@ function AssetsPage() {
             placeholder="Search number, make, person"
             className="sm:flex-1"
           />
-          <Select value={kind} onValueChange={setKind}>
-            <SelectTrigger className="sm:w-40">
-              <SelectValue placeholder="Kind" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All kinds</SelectItem>
-              {ASSET_KINDS.map((k) => (
-                <SelectItem key={k} value={k}>
-                  {k}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <select aria-label="Filter asset type" className="h-10 rounded-xl border bg-card px-3 text-sm" value={kind} onChange={e=>setKind(e.target.value)}><option value="all">All kinds</option>{kinds.map(k=><option value={k} key={k}>{k}</option>)}</select>
           <Select value={holder} onValueChange={setHolder}>
             <SelectTrigger className="sm:w-52">
               <SelectValue placeholder="Holder" />
@@ -172,7 +164,7 @@ function AssetsPage() {
                       </button>
                     </td>
                     <td className="px-4 py-3">
-                      {asset.kind} · {asset.make} {asset.model}
+                      <ItemIcon name={asset.kind} className="mr-2 inline size-4"/>{asset.kind} · {asset.make} {asset.model}
                     </td>
                     <td className="px-4 py-3">{personName(people, asset.holderId)}</td>
                     <td className="px-4 py-3 text-muted-foreground">{asset.location || "—"}</td>
@@ -307,21 +299,10 @@ function AssetDialog({
             <Input id="as-no" value={assetNo} onChange={(e) => setAssetNo(e.target.value)} placeholder="CPU-014" />
           </Field>
           <Field label="Kind">
-            <Select value={kind} onValueChange={setKind}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {ASSET_KINDS.map((k) => (
-                  <SelectItem key={k} value={k}>
-                    {k}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <CatalogSelect label="Asset type" kind="assetKinds" value={kind} onChange={setKind}/>
           </Field>
           <Field label="Make" htmlFor="as-make">
-            <Input id="as-make" value={make} onChange={(e) => setMake(e.target.value)} />
+            <CatalogSelect label="Make" kind="makes" value={make} onChange={setMake}/>
           </Field>
           <Field label="Model" htmlFor="as-model">
             <Input id="as-model" value={model} onChange={(e) => setModel(e.target.value)} />
@@ -344,8 +325,8 @@ function AssetDialog({
               </SelectContent>
             </Select>
           </Field>
-          <Field label="Location" htmlFor="as-loc" className="sm:col-span-2">
-            <Input id="as-loc" value={location} onChange={(e) => setLocation(e.target.value)} placeholder="EE cabin" />
+          <Field label={holderId === "store" ? "Store location" : "Room · follows person"} htmlFor="as-loc" className="sm:col-span-2">
+            <Input id="as-loc" disabled={holderId !== "store"} value={holderId === "store" ? location : people.find(p=>p.id===holderId)?.room || "Room not set"} onChange={(e) => setLocation(e.target.value)} placeholder="EE cabin" />
           </Field>
           <Field label="Notes" htmlFor="as-notes" className="sm:col-span-2">
             <Textarea id="as-notes" value={notes} onChange={(e) => setNotes(e.target.value)} />
@@ -444,8 +425,8 @@ function TransferDialog({ asset, onClose }: { asset: Asset | null; onClose: () =
               </SelectContent>
             </Select>
           </Field>
-          <Field label="Location" htmlFor="tr-loc">
-            <Input id="tr-loc" value={location} onChange={(e) => setLocation(e.target.value)} />
+          <Field label={to === "store" ? "Store location" : "Room · follows person"} htmlFor="tr-loc">
+            <Input id="tr-loc" disabled={to !== "store"} value={to === "store" ? location : people.find(p=>p.id===to)?.room || "Room not set"} onChange={(e) => setLocation(e.target.value)} />
           </Field>
           <Field label="Note" htmlFor="tr-note">
             <Input
@@ -464,10 +445,7 @@ function TransferDialog({ asset, onClose }: { asset: Asset | null; onClose: () =
             onClick={async () => {
               if (!asset) return;
               const next = to === "store" ? null : to;
-              await transferAsset(asset.id, next, note.trim());
-              if (location.trim() !== asset.location) {
-                await updateAsset(asset.id, { location: location.trim() });
-              }
+              await transferAsset(asset.id, next, note.trim(), next ? undefined : location.trim());
               toast.success(`${asset.assetNo} transferred`);
               onClose();
             }}

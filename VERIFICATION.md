@@ -1,5 +1,22 @@
 # Verification · 14 October 2026
 
+## Request and inventory refinement · 15 October 2026
+
+Implemented editable requirements until issue, atomic partial issue with remaining-stock preview, clear Open/Awaiting receipt/Received/Cancelled tabs, a dated material ledger, clickable filtered dashboard cards and latest-five requests. Inventory now has persistent grid/list preference, fixed <5 red / <10 orange / >=10 green availability, cross-field search, persisted inline catalogue options, item-name suggestions, quantity steppers and selectable matching icons. Stock movement history and physical counts remain available.
+
+People writes/imports are administrator-only; storekeepers retain audit room updates. Password-help contacts create administrator notifications; administrators can reset to a new password or the current personnel number. New employee accounts use personnel number as default. Existing password hashes remain unreadable and unchanged unless explicitly reset.
+
+Passed 17 domain tests, isolated HTTP integration checks, and production TypeScript/build. HTTP checks cover pre-issue edits and post-issue rejection, partial direct issue, administrator default reset, session revocation, default credentials for newly created people, permissions, rollback and backup integrity. Browser checks in a separate QA database verified creating and editing a requirement from two to three reams, issuing one and showing four left on shelf, receipt stage, persisted inline make creation, make search, grid/list switch and unallocated-assets navigation. At phone width 390, inventory had no horizontal document overflow. The live register was preserved; QA records remain isolated.
+
+The historical notes below refer to earlier releases and their former separate approval stage.
+## 15 October update
+
+Person-owned rooms, stock reservation, partial approvals, stock forecasts, and low-stock notifications are implemented. Thirteen domain tests and the HTTP integration checks pass, including reservation conflicts, cancellation release, exact approved issue quantities, quantity validation, canonical rooms, transfers, and count adjustments below reserved stock. Production TypeScript checks and bundling pass.
+
+Browser checks on the isolated feature database verified requesting two A4 bundles, approving one, the available-stock forecast changing from three to four, and issuing only one while keeping the receipt open. Changed a person's room to 501 and verified their CPU, monitor, and printer all updated. Checked the review dialog at phone width 390 with no horizontal overflow. The running register was backed up before person-room migration. UI test issues and room changes were made only in the separate QA register.
+
+The earlier verification notes below describe the original release.
+
 The application preserves the first ZIP's interface, responsive navigation, stock screens, people register and CPU/monitor/printer audit slots. Its data layer has been replaced with an authenticated Express/SQLite backend.
 
 Passed production TypeScript checks and Vite bundling. Nine domain tests cover the request lifecycle, quantity validation, duplicate-line overdraw, asset uniqueness/displacement, swaps, role visibility, retirement handover, stock count adjustments, and imports.

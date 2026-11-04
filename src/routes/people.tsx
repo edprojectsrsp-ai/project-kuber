@@ -1,3 +1,5 @@
+import { ResetPasswordDialog } from '@/components/admin-notifications';
+import { CatalogSelect } from '@/components/catalog-controls';
 import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { Plus, Users } from "lucide-react";
@@ -31,6 +33,7 @@ function PeoplePage() {
   const [q, setQ] = useState("");
   const [tab, setTab] = useState<"active" | "retired" | "all">("active");
   const [editing, setEditing] = useState<Person | null | "new">(null);
+  const [reset,setReset]=useState<Person|null>(null);
   const [retiring, setRetiring] = useState<Person | null>(null);
 
   const filtered = useMemo(() => {
@@ -39,7 +42,7 @@ function PeoplePage() {
       .filter((p) => (tab === "all" ? true : p.status === tab))
       .filter((p) => {
         if (!query) return true;
-        return `${p.personnelNo} ${p.name} ${p.designation} ${p.section}`.toLowerCase().includes(query);
+        return `${p.personnelNo} ${p.name} ${p.designation} · Room {p.room || "Not set"} ${p.section}`.toLowerCase().includes(query);
       })
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [people, q, tab]);
@@ -69,7 +72,7 @@ function PeoplePage() {
         <SearchField
           value={q}
           onChange={setQ}
-          placeholder="Search name or section"
+          placeholder="Search name, personnel number, designation, section or room"
           className="sm:ml-auto sm:max-w-sm sm:flex-1"
         />
       </div>
@@ -97,7 +100,7 @@ function PeoplePage() {
                       <div>
                         <p className="font-medium">{person.name}</p>
                         <p className="text-sm text-muted-foreground">
-                          {person.personnelNo || "No personnel no."} · {person.designation} · {person.section}
+                          {person.personnelNo || "No personnel no."} · {person.designation} · {person.section} · Room {person.room || "Not set"}
                         </p>
                       </div>
                       {person.status === "retired" ? (
@@ -107,7 +110,7 @@ function PeoplePage() {
                       )}
                     </div>
                     <p className="text-sm tabular-nums text-muted-foreground">
-                      {held.length} asset{held.length === 1 ? "" : "s"}
+                      Room {person.room || "Not set"} · {held.length} asset{held.length === 1 ? "" : "s"}
                       {held.length > 0
                         ? ` · ${held
                             .slice(0, 3)
@@ -116,7 +119,7 @@ function PeoplePage() {
                         : ""}
                     </p>
                     <div className="flex gap-2">
-                      <Button size="sm" variant="outline" onClick={() => setEditing(person)}>
+                      <Button size="sm" variant="outline" onClick={()=>setReset(person)}>Reset password</Button><Button size="sm" variant="outline" onClick={() => setEditing(person)}>
                         Edit
                       </Button>
                       {person.status === "active" ? (
@@ -138,7 +141,7 @@ function PeoplePage() {
         open={editing !== null}
         onClose={() => setEditing(null)}
       />
-      <RetireDialog person={retiring} onClose={() => setRetiring(null)} />
+      <ResetPasswordDialog person={reset} onClose={()=>setReset(null)}/><RetireDialog person={retiring} onClose={() => setRetiring(null)} />
     </div>
   );
 }
@@ -158,6 +161,7 @@ function PersonDialog({
   const [name, setName] = useState("");
   const [designation, setDesignation] = useState("");
   const [section, setSection] = useState("Projects");
+  const [room,setRoom]=useState("");
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
@@ -167,6 +171,7 @@ function PersonDialog({
           setName(person?.name ?? "");
           setDesignation(person?.designation ?? "");
           setSection(person?.section ?? "Projects");
+          setRoom(person?.room ?? "");
         }}
       >
         <DialogHeader>
@@ -186,15 +191,11 @@ function PersonDialog({
             <Input id="pe-name" value={name} onChange={(e) => setName(e.target.value)} />
           </Field>
           <Field label="Designation" htmlFor="pe-des">
-            <Input
-              id="pe-des"
-              value={designation}
-              onChange={(e) => setDesignation(e.target.value)}
-              placeholder="Junior Engineer"
-            />
+            <CatalogSelect label="Designation" kind="designations" value={designation} onChange={setDesignation}/>
           </Field>
+          <Field label="Room number" htmlFor="pe-room"><Input id="pe-room" value={room} onChange={e=>setRoom(e.target.value)} placeholder="Room 101 / EE cabin"/><p className="mt-1 text-xs text-muted-foreground">All assets held by this person follow this room.</p></Field>
           <Field label="Section" htmlFor="pe-sec">
-            <Input id="pe-sec" value={section} onChange={(e) => setSection(e.target.value)} />
+            <CatalogSelect label="Section" kind="sections" value={section} onChange={setSection}/>
           </Field>
         </div>
         <DialogFooter>
@@ -213,6 +214,7 @@ function PersonDialog({
                   name: name.trim(),
                   designation: designation.trim(),
                   section: section.trim(),
+                  room:room.trim(),
                 });
                 toast.success("Person updated");
               } else {
@@ -221,6 +223,7 @@ function PersonDialog({
                   name: name.trim(),
                   designation: designation.trim() || "Staff",
                   section: section.trim() || "Projects",
+                  room:room.trim(),
                   status: "active",
                 });
                 toast.success("Person added");

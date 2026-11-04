@@ -1,3 +1,6 @@
+import { RequestDialog } from '@/components/request-dialog';
+import { useState } from "react";
+import { ApprovalDialog } from "@/components/approval-dialog";
 import { askText } from "@/components/text-prompt";
 import { useSession } from "@/lib/session";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
@@ -22,15 +25,14 @@ import { personName, useRegister } from "@/lib/store/use-register";
 export const Route = createFileRoute("/slips/$slipId")({ component: SlipDetail });
 
 function SlipDetail() {
+  const [review,setReview]=useState(false),[editing,setEditing]=useState(false);
   const user=useSession(s=>s.user)!;
-  const approveSlip=useRegister(s=>s.approveSlip);
   const reportReceipt=useRegister(s=>s.reportReceipt);
   const { slipId } = Route.useParams();
   const navigate = useNavigate();
   const slip = useRegister((s) => s.slips.find((x) => x.id === slipId));
   const people = useRegister((s) => s.people);
   const items = useRegister((s) => s.items);
-  const issueSlip = useRegister((s) => s.issueSlip);
   const confirmSlip = useRegister((s) => s.confirmSlip);
   const cancelSlip = useRegister((s) => s.cancelSlip);
   const person = people.find((p) => p.id === slip?.personId);
@@ -95,10 +97,10 @@ function SlipDetail() {
               const item = items.find((x) => x.id === line.itemId);
               return (
                 <tr key={`${line.itemId}-${i}`} className="border-b border-border/70">
-                  <td className="py-3">{item?.name ?? "Removed item"}</td>
+                  <td className="py-3">{item?.name ?? "Removed item"}{line.approvedQty !== undefined && line.approvedQty < line.qty && <p className="mt-1 text-xs text-warn">Requested {line.qty} · Issued {line.issuedQty ?? line.approvedQty}</p>}</td>
                   <td className="py-3 text-muted-foreground">{item?.make || "—"}</td>
                   <td className="py-3 text-right font-mono tabular-nums">
-                    {item ? qtyLabel(line.qty, item.unit) : line.qty}
+                    {item ? qtyLabel(slip.status === "open" ? line.qty : line.issuedQty ?? line.approvedQty ?? line.qty, item.unit) : line.qty}
                   </td>
                 </tr>
               );
@@ -132,23 +134,18 @@ function SlipDetail() {
         </div>
       </article>
 
+      <RequestDialog open={editing} slip={slip} onClose={()=>setEditing(false)}/><ApprovalDialog slip={review?slip:null} onClose={()=>setReview(false)}/>
+      {slip.approvalNote && <p className="rounded-xl bg-accent p-4 text-sm">Storekeeper note: {slip.approvalNote}</p>}
       {slip.receiptProblem && <p className="rounded-xl bg-warn-soft p-4 text-sm text-warn">Receipt problem: {slip.receiptProblem}</p>}
       {slip.status === "issued" && slip.personId === user.personId && <Button variant="outline" onClick={async()=>{const reason=await askText("Describe the missing or incorrect material:");if(reason?.trim()){await reportReceipt(slip.id,reason);toast.success("Problem reported to the storekeeper");}}}>Report a receipt problem</Button>}
-      <div className="flex flex-col gap-2 sm:flex-row">
+      <div className="flex flex-col gap-2 sm:flex-row">{slip.personId===user.personId && ["open","approved"].includes(slip.status) && <><Button variant="outline" onClick={()=>setEditing(true)}>Edit requirement</Button>{user.role==="employee"&&<Button variant="outline" onClick={async()=>{await cancelSlip(slip.id);toast.success("Request cancelled");}}>Cancel request</Button>}</>}
         {user.role !== "employee" && ["open","approved"].includes(slip.status) ? (
           <>
             <Button
               className="sm:flex-1"
-              onClick={async () => {
-                const result = slip.status === "open" ? await approveSlip(slip.id) : await issueSlip(slip.id);
-                if (!result.ok) {
-                  toast.error(result.message);
-                  return;
-                }
-                toast.success(slip.status === "open" ? "Request approved" : "Material issued — stock deducted");
-              }}
+              onClick={()=>setReview(true)}
             >
-              {slip.status === "open" ? "Approve request" : "Issue material"}
+              Review & issue
             </Button>
             <AlertDialog>
               <AlertDialogTrigger asChild>

@@ -5,7 +5,7 @@ import { mkdirSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { sampleRegister } from '../src/lib/store/seed.ts';
-import { applyAction, visibleData, fail } from './domain.mjs';
+import { applyAction, visibleData, fail, normalizeRooms } from './domain.mjs';
 const root=path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const dbPath=process.env.DB_FILE||path.join(root,'data','kuber.db');mkdirSync(path.dirname(dbPath),{recursive:true});
 const db=new Database(dbPath);db.pragma('journal_mode=WAL');
@@ -32,6 +32,12 @@ if(!db.prepare("SELECT person_id FROM accounts WHERE role='admin'").get())db.tra
  db.prepare('INSERT INTO accounts VALUES(?,?,?,0)').run('p_admin','admin',hash(process.env.KUBER_INITIAL_PASSWORD||'Kuber@2026'));
  db.prepare('UPDATE register SET revision=?,data=? WHERE id=1').run(current.revision+1,JSON.stringify(current.data));
 })();
+if(read().data.roomModelVersion!==1){
+ const current=read(),destination=path.join(path.dirname(dbPath),'backups',`before-person-rooms-${Date.now()}.db`);mkdirSync(path.dirname(destination),{recursive:true});await db.backup(destination);
+ const previous=new Map(current.data.assets.map(a=>[a.id,a.location]));normalizeRooms(current.data);
+ for(const a of current.data.assets)if(a.holderId&&previous.get(a.id)!==a.location)current.data.events.unshift({id:'room-migration-'+a.id,assetId:a.id,at:new Date().toISOString(),type:'updated',fromHolderId:a.holderId,toHolderId:a.holderId,note:`Person room migration: ${previous.get(a.id)||'not set'} → ${a.location||'not set'}`,by:'System'});
+ db.prepare('UPDATE register SET revision=?,data=? WHERE id=1').run(current.revision+1,JSON.stringify(current.data));console.log('Person rooms migrated; original database backed up.');
+}
 const app=express();app.disable('x-powered-by');app.use(express.json({limit:'5mb'}));
 app.use((req,res,next)=>{res.set('X-Content-Type-Options','nosniff');res.set('Referrer-Policy','same-origin');res.set('X-Frame-Options','DENY');if(req.path.startsWith('/api'))res.set('Cache-Control','no-store');if(!['GET','HEAD','OPTIONS'].includes(req.method)&&req.headers.origin){try{if(new URL(req.headers.origin).host!==req.headers.host)fail('Cross-origin writes are not allowed.',403);}catch(e){return res.status(e.status||403).json({error:e.message});}}next();});
 const cookie=(res,token,age)=>res.cookie('kuber_session',token,{httpOnly:true,sameSite:'strict',secure:process.env.COOKIE_SECURE==='true',maxAge:age,path:'/'});
@@ -64,11 +70,18 @@ app.post('/api/password-help/:id/resolve',wrap((req,res)=>{
  if(req.user.role!=='admin')fail('Only an administrator can reset passwords.',403);const help=db.prepare("SELECT * FROM password_help WHERE id=? AND status='pending'").get(req.params.id);if(!help)fail('This request is no longer pending.',404);if(help.person_id===req.user.personId)fail('Use Change password for your own account.');const password=req.body.password;if(typeof password!=='string'||password.length<10||password.length>128)fail('Enter a temporary password of 10–128 characters.');
  db.transaction(()=>{db.prepare('UPDATE accounts SET hash=?,must_change=0 WHERE person_id=?').run(hash(password),help.person_id);db.prepare('DELETE FROM sessions WHERE person_id=?').run(help.person_id);db.prepare("UPDATE password_help SET status='resolved',resolved_at=?,resolved_by=? WHERE id=?").run(new Date().toISOString(),req.user.personId,help.id);db.prepare('INSERT INTO activity(at,person_id,action) VALUES(?,?,?)').run(new Date().toISOString(),req.user.personId,'password-reset');})();res.json({ok:true});
 }));
+app.post('/api/accounts/:id/reset',wrap((req,res)=>{
+ if(req.user.role!=='admin')fail('Administrator access required.',403);
+ const p=read().data.people.find(p=>p.id===req.params.id);if(!p)fail('Person not found.',404);if(p.id===req.user.personId)fail('Use Change password for your own account.');
+ const password=req.body.useDefault===true?p.personnelNo:req.body.password;if(typeof password!=='string'||password.length>(128)||password.length<(req.body.useDefault===true?1:10))fail('Enter a password of 10–128 characters, or reset to personnel number.');
+ if(!db.prepare('SELECT person_id FROM accounts WHERE person_id=?').get(p.id))fail('Account not found.',404);
+ db.transaction(()=>{db.prepare('UPDATE accounts SET hash=?,must_change=0 WHERE person_id=?').run(hash(password),p.id);db.prepare('DELETE FROM sessions WHERE person_id=?').run(p.id);db.prepare("UPDATE password_help SET status='resolved',resolved_at=?,resolved_by=? WHERE person_id=? AND status='pending'").run(new Date().toISOString(),req.user.personId,p.id);db.prepare('INSERT INTO activity(at,person_id,action) VALUES(?,?,?)').run(new Date().toISOString(),req.user.personId,'password-reset:'+p.id);})();res.json({ok:true});
+}));
 app.get('/api/register',(req,res)=>{const {revision,data}=read();res.json({revision,data:visibleData(data,req.user)});});
 app.post('/api/action',wrap((req,res)=>{
  const {action,args,revision}=req.body;if(typeof action!=='string'||!Array.isArray(args))fail('Invalid action.');
  const response=db.transaction(()=>{const current=read();if(current.revision!==revision)fail('The register changed on another device. It has been refreshed; please try again.',409);const before=new Set(current.data.people.map(p=>p.id));const result=applyAction(current.data,req.user,action,args);
-  const newPeople=current.data.people.filter(p=>!before.has(p.id));if(newPeople.length){const password=req.body.initialPassword;if(typeof password!=='string'||password.length<10||password.length>128)fail('Enter a temporary password of 10–128 characters for the new employee.');for(const p of newPeople)db.prepare('INSERT INTO accounts VALUES(?,?,?,0)').run(p.id,'employee',hash(password));}
+  const newPeople=current.data.people.filter(p=>!before.has(p.id));if(newPeople.length){for(const p of newPeople){const password=req.body.initialPassword||p.personnelNo;if(typeof password!=='string'||password.length<1||password.length>128)fail('Invalid initial password.');db.prepare('INSERT INTO accounts VALUES(?,?,?,0)').run(p.id,'employee',hash(password));}}
   db.prepare('UPDATE register SET revision=?,data=? WHERE id=1').run(current.revision+1,JSON.stringify(current.data));db.prepare('INSERT INTO activity(at,person_id,action) VALUES(?,?,?)').run(new Date().toISOString(),req.user.personId,action);return {result,revision:current.revision+1,data:visibleData(current.data,req.user)};
  })();res.json(response);
 }));

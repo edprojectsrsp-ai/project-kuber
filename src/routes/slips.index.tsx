@@ -1,401 +1,288 @@
+import { useState } from "react";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { ClipboardList, Plus, Pencil } from "lucide-react";
 import { useSession } from "@/lib/session";
-import { useMemo, useState } from "react";
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { ClipboardList, Plus, Trash2 } from "lucide-react";
-import { toast } from "sonner";
-import { EmptyState } from "@/components/empty-state";
-import { Field } from "@/components/form-field";
+import { useRegister, personLabel } from "@/lib/store/use-register";
+import type { Slip } from "@/lib/store/types";
+import { formatDate, formatDateTime } from "@/lib/format";
 import { PageHeader } from "@/components/page-header";
 import { SearchField } from "@/components/search-field";
 import { SlipStatusBadge } from "@/components/status-badge";
+import { ApprovalDialog } from "@/components/approval-dialog";
+import { RequestDialog } from "@/components/request-dialog";
+import { ItemIcon } from "@/components/catalog-controls";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Textarea } from "@/components/ui/textarea";
-import { formatDate } from "@/lib/format";
-import { personLabel, personName, useRegister } from "@/lib/store/use-register";
-import type { SlipLine, SlipStatus } from "@/lib/store/types";
-
-export const Route = createFileRoute("/slips/")({ component: SlipsPage });
-
-type Filter = "live" | "approved" | "open" | "issued" | "closed" | "all";
-
+export const Route = createFileRoute("/slips/")({
+  validateSearch: (s: Record<string, unknown>): { tab?: string } => ({
+    tab: ["open", "issued", "closed", "cancelled", "history", "all"].includes(
+      String(s.tab),
+    )
+      ? String(s.tab)
+      : undefined,
+  }),
+  component: SlipsPage,
+});
+const tabs = [
+  ["all", "All requests"],
+  ["open", "Open"],
+  ["issued", "Awaiting receipt"],
+  ["closed", "Received"],
+  ["cancelled", "Cancelled"],
+  ["history", "Material ledger"],
+];
 function SlipsPage() {
-  const user=useSession(s=>s.user)!;
-  const approveSlip=useRegister(s=>s.approveSlip);
-  const slips = useRegister((s) => s.slips);
-  const people = useRegister((s) => s.people);
-  const items = useRegister((s) => s.items);
-  const [filter, setFilter] = useState<Filter>("live");
-  const [q, setQ] = useState("");
-  const [personId, setPersonId] = useState("all");
-  const [openAsk, setOpenAsk] = useState(false);
-  const [openNew, setOpenNew] = useState(false);
-  const giveSlip = useRegister((s) => s.giveSlip);
-
-  const filtered = useMemo(() => {
-    const query = q.trim().toLowerCase();
-    return slips.filter((s) => {
-      if (filter === "live" && s.status !== "open" && s.status !== "approved" && s.status !== "issued") return false;
-      if (filter !== "live" && filter !== "all" && s.status !== filter) return false;
-      if (personId !== "all" && s.personId !== personId) return false;
-      if (!query) return true;
-      const holder = personName(people, s.personId).toLowerCase();
-      const no = people.find((p) => p.id === s.personId)?.personnelNo ?? "";
-      return `${s.number} ${s.purpose} ${holder} ${no}`.toLowerCase().includes(query);
-    });
-  }, [slips, filter, q, people, personId]);
-
+  const user = useSession((s) => s.user)!;
+  const { slips, people, items } = useRegister();
+  const { tab = "all" } = Route.useSearch();
+  const navigate = useNavigate();
+  const [q, setQ] = useState(""),
+    [request, setRequest] = useState(false),
+    [editing, setEditing] = useState<Slip>(),
+    [review, setReview] = useState<Slip | null>(null);
+  const matches = (s: Slip, t: string) =>
+    t === "all" ||
+    (t === "history"
+      ? ["issued", "closed"].includes(s.status)
+      : t === "open"
+        ? ["open", "approved"].includes(s.status)
+        : s.status === t);
+  const filtered = slips
+    .filter(
+      (s) =>
+        matches(s, tab) &&
+        [
+          s.number,
+          s.purpose,
+          s.status,
+          personLabel(people, s.personId),
+          ...s.lines.map((l) => {
+            const i = items.find((i) => i.id === l.itemId);
+            return [i?.name, i?.make, i?.category, i?.unit].join(" ");
+          }),
+          s.issuedAt,
+          s.createdAt,
+          formatDate(s.issuedAt || s.createdAt),
+          formatDate(s.createdAt),
+        ]
+          .join(" ")
+          .toLowerCase()
+          .includes(q.toLowerCase()),
+    )
+    .sort((a, b) =>
+      (tab === "history"
+        ? b.issuedAt || b.createdAt
+        : b.createdAt
+      ).localeCompare(
+        tab === "history" ? a.issuedAt || a.createdAt : a.createdAt,
+      ),
+    );
   return (
     <div className="mx-auto max-w-6xl space-y-6">
       <PageHeader
-        eyebrow="Issues"
-        title="Requests"
-        description="A person asks for one item. The storekeeper approves and issues it, stock drops, and that person can see their own history."
+        eyebrow={user.role === "employee" ? "My store" : "Store desk"}
+        title="Requests & material ledger"
+        description="Open → awaiting receipt → received. The ledger records each item issued, with its date."
         actions={
-          <Button onClick={() => setOpenAsk(true)}>
-            <Plus className="size-4" />
-            Ask for material
-          </Button>
+          user.role === "employee" ? (
+            <Button onClick={() => setRequest(true)}>
+              <Plus className="size-4" />
+              Request material
+            </Button>
+          ) : undefined
         }
       />
-
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        <Tabs value={filter} onValueChange={(v) => setFilter(v as Filter)}>
-          <TabsList className="w-full overflow-x-auto sm:w-auto">
-            <TabsTrigger value="live">Live</TabsTrigger>
-            <TabsTrigger value="open">Open</TabsTrigger>
-            <TabsTrigger value="approved">Approved</TabsTrigger>
-            <TabsTrigger value="issued">Issued</TabsTrigger>
-            <TabsTrigger value="closed">Closed</TabsTrigger>
-            <TabsTrigger value="all">All</TabsTrigger>
-          </TabsList>
-        </Tabs>
-        <SearchField
-          value={q}
-          onChange={setQ}
-          placeholder="Search slip or item"
-          className="sm:max-w-xs sm:flex-1"
-        />
-        {user.role !== "employee" && <Select value={personId} onValueChange={setPersonId}>
-          <SelectTrigger className="sm:w-56">
-            <SelectValue placeholder="Person" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Everyone’s history</SelectItem>
-            {people
-              .filter((p) => p.status === "active")
-              .map((p) => (
-                <SelectItem key={p.id} value={p.id}>
-                  {personLabel(people, p.id)}
-                </SelectItem>
-              ))}
-          </SelectContent>
-        </Select>}
+      <div
+        className="flex flex-wrap gap-2"
+        role="tablist"
+        aria-label="Request status"
+      >
+        {tabs.map(([key, label]) => (
+          <button
+            role="tab"
+            aria-selected={tab === key}
+            key={key}
+            onClick={() =>
+              void navigate({ to: "/slips", search: { tab: key } })
+            }
+            className={
+              "rounded-xl px-3 py-2 text-sm transition " +
+              (tab === key
+                ? "bg-primary text-primary-foreground shadow-sm"
+                : "bg-card text-muted-foreground hover:bg-muted")
+            }
+          >
+            {label}{" "}
+            <span className="ml-1 text-xs opacity-70">
+              {slips.filter((s) => matches(s, key)).length}
+            </span>
+          </button>
+        ))}
       </div>
-
-      {filtered.length === 0 ? (
-        <EmptyState
-          icon={ClipboardList}
-          title="No slips here"
-          hint="Create a slip when someone asks for material from the store."
-          action={
-            <Button onClick={() => setOpenAsk(true)}>
-              <Plus className="size-4" />
-              Ask for material
-            </Button>
-          }
-        />
+      <SearchField
+        value={q}
+        onChange={setQ}
+        placeholder="Search item, make, person, personnel number, slip or date…"
+      />
+      {tab === "history" ? (
+        <div className="overflow-x-auto rounded-2xl border bg-card">
+          <table className="w-full text-left text-sm">
+            <thead className="bg-muted text-xs text-muted-foreground">
+              <tr>
+                {[
+                  "Issued on",
+                  "Item / make",
+                  "Recipient",
+                  "Quantity",
+                  "Request",
+                ].map((h) => (
+                  <th className="p-4" key={h}>
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.flatMap((s) =>
+                s.lines
+                  .filter((l) => (l.issuedQty ?? l.approvedQty ?? l.qty) > 0)
+                  .map((l) => {
+                    const i = items.find((i) => i.id === l.itemId);
+                    return (
+                      <tr className="border-t" key={s.id + l.itemId}>
+                        <td className="whitespace-nowrap p-4">
+                          {formatDateTime(s.issuedAt || s.createdAt)}
+                        </td>
+                        <td className="p-4">
+                          <div className="flex items-center gap-2">
+                            <ItemIcon name={i?.name} icon={i?.icon} />
+                            <span>
+                              {i?.name}
+                              <small className="block text-muted-foreground">
+                                {i?.make}
+                              </small>
+                            </span>
+                          </div>
+                        </td>
+                        <td className="p-4">
+                          {personLabel(people, s.personId)}
+                        </td>
+                        <td className="p-4 font-semibold">
+                          {l.issuedQty ?? l.approvedQty ?? l.qty} {i?.unit}
+                        </td>
+                        <td className="p-4">
+                          <Link
+                            className="text-primary underline"
+                            to="/slips/$slipId"
+                            params={{ slipId: s.id }}
+                          >
+                            {s.number}
+                          </Link>
+                        </td>
+                      </tr>
+                    );
+                  }),
+              )}
+            </tbody>
+          </table>
+        </div>
       ) : (
-        <ul className="space-y-2">
-          {filtered.map((slip) => (
-            <li key={slip.id}>
-              <Link to="/slips/$slipId" params={{ slipId: slip.id }} className="block">
-                <Card className="transition-[box-shadow] duration-[var(--motion-quick)] hover:shadow-[var(--shadow-border-hover)]">
-                  <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="text-lg font-semibold">{slip.number}</p>
-                        <SlipStatusBadge status={slip.status as SlipStatus} />
-                      </div>
-                      <p className="truncate text-sm text-muted-foreground">
-                        {personLabel(people, slip.personId)} · {slip.purpose}
-                      </p>
-                    </div>
-                    <div className="flex items-center justify-between gap-3 sm:justify-end">
-                      <div className="text-sm text-muted-foreground sm:text-right">
-                        <p>{formatDate(slip.createdAt)}</p>
-                        <p className="tabular-nums">
-                          {slip.lines
-                            .map((l) => {
-                              const item = items.find((i) => i.id === l.itemId);
-                              return item ? `${item.name} × ${l.qty}` : "";
-                            })
-                            .filter(Boolean)
-                            .slice(0, 2)
-                            .join(", ")}
-                        </p>
-                      </div>
-                      {user.role !== "employee" && ["open","approved"].includes(slip.status) ? (
-                        <Button
-                          size="sm"
-                          onClick={async (e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            const result = slip.status === "open" ? await approveSlip(slip.id) : await giveSlip(slip.id);
-                            if (!result.ok) toast.error(result.message);
-                            else toast.success(`${slip.status === "open" ? "Approved" : "Issued"} · ${slip.number}`);
-                          }}
-                        >
-                          {slip.status === "open" ? "Approve" : "Issue"}
-                        </Button>
-                      ) : null}
-                    </div>
-                  </CardContent>
-                </Card>
-              </Link>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      <AskDialog open={openAsk} onClose={() => setOpenAsk(false)} />
-      <NewSlipDialog open={openNew} onClose={() => setOpenNew(false)} />
-    </div>
-  );
-}
-
-function AskDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const user=useSession(s=>s.user)!;
-  const people = useRegister((s) => s.people);
-  const items = useRegister((s) => s.items);
-  const createSlip = useRegister((s) => s.createSlip);
-  const active = people.filter((p) => p.status === "active");
-  const [personId, setPersonId] = useState("");
-  const [itemId, setItemId] = useState("");
-  const [qty, setQty] = useState("1");
-
-  return (
-    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent
-        onOpenAutoFocus={() => {
-          setPersonId(user.role !== "employee" ? active[0]?.id ?? "" : user.personId);
-          setItemId(items[0]?.id ?? "");
-          setQty("1");
-        }}
-      >
-        <DialogHeader>
-          <DialogTitle>Ask for material</DialogTitle>
-          <DialogDescription>
-            One item. The storekeeper gives it when it is handed over. Stock does not change until then.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="grid gap-4">
-          {user.role !== "employee" && <Field label="Who" htmlFor="ask-who">
-            <Select value={personId} onValueChange={setPersonId}>
-              <SelectTrigger id="ask-who">
-                <SelectValue placeholder="Person" />
-              </SelectTrigger>
-              <SelectContent>
-                {active.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {personLabel(people, p.id)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>}
-          <Field label="Item" htmlFor="ask-item">
-            <Select value={itemId} onValueChange={setItemId}>
-              <SelectTrigger id="ask-item">
-                <SelectValue placeholder="Item" />
-              </SelectTrigger>
-              <SelectContent>
-                {items.map((item) => (
-                  <SelectItem key={item.id} value={item.id}>
-                    {item.name} · {item.qty} {item.unit} in store
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
-          <Field label="How many" htmlFor="ask-qty">
-            <Input
-              id="ask-qty"
-              inputMode="numeric"
-              value={qty}
-              onChange={(e) => setQty(e.target.value)}
-            />
-          </Field>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button
-            onClick={async () => {
-              const n = Number(qty);
-              if (!personId || !itemId || !Number.isFinite(n) || n <= 0) {
-                toast.error("Choose a person, an item, and a quantity");
-                return;
-              }
-              await createSlip({
-                personId,
-                purpose: "Store request",
-                lines: [{ itemId, qty: n }],
-              });
-              toast.success("Request sent to the store");
-              onClose();
-            }}
-          >
-            Ask
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function NewSlipDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const people = useRegister((s) => s.people);
-  const items = useRegister((s) => s.items);
-  const createSlip = useRegister((s) => s.createSlip);
-  const [personId, setPersonId] = useState("");
-  const [purpose, setPurpose] = useState("");
-  const [lines, setLines] = useState<SlipLine[]>([{ itemId: "", qty: 1 }]);
-  const activePeople = people.filter((p) => p.status === "active");
-
-  return (
-    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent
-        className="max-w-xl"
-        onOpenAutoFocus={() => {
-          setPersonId(activePeople[0]?.id ?? "");
-          setPurpose("");
-          setLines([{ itemId: items[0]?.id ?? "", qty: 1 }]);
-        }}
-      >
-        <DialogHeader>
-          <DialogTitle>New issue slip</DialogTitle>
-          <DialogDescription>
-            Stock is deducted only when you issue the slip, not when you write it.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="grid gap-4">
-          <Field label="Requested by">
-            <Select value={personId} onValueChange={setPersonId}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select person" />
-              </SelectTrigger>
-              <SelectContent>
-                {activePeople.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.name} · {p.designation}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
-          <Field label="Purpose" htmlFor="slip-purpose">
-            <Textarea
-              id="slip-purpose"
-              value={purpose}
-              onChange={(e) => setPurpose(e.target.value)}
-              placeholder="Why is this material needed?"
-            />
-          </Field>
-          <div className="grid gap-2">
-            <p className="text-sm font-medium">Items</p>
-            {lines.map((line, idx) => (
-              <div key={idx} className="flex items-center gap-2">
-                <Select
-                  value={line.itemId}
-                  onValueChange={(itemId) =>
-                    setLines((rows) => rows.map((r, i) => (i === idx ? { ...r, itemId } : r)))
-                  }
-                >
-                  <SelectTrigger className="flex-1">
-                    <SelectValue placeholder="Item" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {items.map((i) => (
-                      <SelectItem key={i.id} value={i.id}>
-                        {i.name} ({i.qty} {i.unit})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Input
-                  type="number"
-                  min={1}
-                  inputMode="numeric"
-                  className="w-20"
-                  value={line.qty}
-                  onChange={(e) =>
-                    setLines((rows) =>
-                      rows.map((r, i) =>
-                        i === idx ? { ...r, qty: Math.max(1, Number(e.target.value) || 1) } : r,
-                      ),
-                    )
-                  }
-                />
-                <Button
-                  type="button"
-                  size="icon-sm"
-                  variant="ghost"
-                  disabled={lines.length === 1}
-                  onClick={() => setLines((rows) => rows.filter((_, i) => i !== idx))}
-                  aria-label="Remove line"
-                >
-                  <Trash2 className="size-4" />
-                </Button>
-              </div>
-            ))}
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="w-fit"
-              onClick={() => setLines((rows) => [...rows, { itemId: items[0]?.id ?? "", qty: 1 }])}
+        <div className="space-y-3">
+          {filtered.map((s) => (
+            <article
+              key={s.id}
+              className="rounded-2xl border bg-card p-5 shadow-sm transition hover:shadow-md"
             >
-              Add line
-            </Button>
-          </div>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <Link
+                  className="space-y-1"
+                  to="/slips/$slipId"
+                  params={{ slipId: s.id }}
+                >
+                  <p className="font-semibold">
+                    {s.number}{" "}
+                    <span className="ml-2 text-sm font-normal text-muted-foreground">
+                      {personLabel(people, s.personId)}
+                    </span>
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {formatDateTime(s.createdAt)}
+                    {s.updatedAt ? " · edited" : ""}
+                  </p>
+                </Link>
+                <SlipStatusBadge status={s.status} />
+              </div>
+              <p className="mt-4 text-sm">
+                {s.lines
+                  .map((l) => {
+                    const i = items.find((i) => i.id === l.itemId);
+                    return (
+                      (s.status === "issued" || s.status === "closed"
+                        ? (l.issuedQty ?? l.approvedQty ?? l.qty)
+                        : l.qty) +
+                      " " +
+                      (i?.unit || "") +
+                      " " +
+                      (i?.name || "Item") +
+                      (i?.make ? " · " + i.make : "")
+                    );
+                  })
+                  .join(" / ")}
+              </p>
+              {s.purpose && (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {s.purpose}
+                </p>
+              )}
+              <div className="mt-4 flex flex-wrap gap-2">
+                <Button size="sm" variant="outline" asChild>
+                  <Link to="/slips/$slipId" params={{ slipId: s.id }}>
+                    View request
+                  </Link>
+                </Button>
+                {["open", "approved"].includes(s.status) &&
+                  s.personId === user.personId && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setEditing(s)}
+                    >
+                      <Pencil className="size-3.5" />
+                      Edit requirement
+                    </Button>
+                  )}
+                {["open", "approved"].includes(s.status) &&
+                  user.role !== "employee" && (
+                    <Button size="sm" onClick={() => setReview(s)}>
+                      Review & issue
+                    </Button>
+                  )}
+                {s.status === "issued" && s.personId === user.personId && (
+                  <Button size="sm" className="receipt-pulse" asChild>
+                    <Link to="/slips/$slipId" params={{ slipId: s.id }}>
+                      Confirm receipt
+                    </Link>
+                  </Button>
+                )}
+              </div>
+            </article>
+          ))}
         </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button
-            onClick={async () => {
-              const clean = lines.filter((l) => l.itemId && l.qty > 0);
-              if (!personId) {
-                toast.error("Select who is requesting");
-                return;
-              }
-              if (clean.length === 0) {
-                toast.error("Add at least one item");
-                return;
-              }
-              await createSlip({ personId, purpose: purpose.trim() || "Store issue", lines: clean });
-              toast.success("Slip written");
-              onClose();
-            }}
-          >
-            Save slip
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      )}
+      {!filtered.length && (
+        <div className="rounded-2xl border border-dashed p-12 text-center text-muted-foreground">
+          <ClipboardList className="mx-auto mb-3 size-8" />
+          No matching records.
+        </div>
+      )}
+      <RequestDialog
+        open={request || !!editing}
+        slip={editing}
+        onClose={() => {
+          setRequest(false);
+          setEditing(undefined);
+        }}
+      />
+      <ApprovalDialog slip={review} onClose={() => setReview(null)} />
+    </div>
   );
 }

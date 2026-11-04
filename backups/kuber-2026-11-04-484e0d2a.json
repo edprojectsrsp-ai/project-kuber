@@ -1,0 +1,8 @@
+{
+  "file": "kuber-2026-11-04-484e0d2a.db.enc",
+  "encryption": "AES-256-GCM",
+  "sha256": "ffd7b67891b246316578a886cc10c788d7c5699bce9e8542e780f5e529acb8aa",
+  "plaintextSha256": "46781017fd070cae28cf487e0c50694369ba5f5adfb1ee3f26bc5be31f586513",
+  "createdAt": "2026-11-04T11:25:51.771Z",
+  "sessionsExcluded": true
+}

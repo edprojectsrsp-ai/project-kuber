@@ -1,257 +1,235 @@
-import { useSession } from "@/lib/session";
-import { EmployeeHome } from "@/components/employee-home";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   Archive,
-  ArrowDownToLine,
-  ArrowLeftRight,
   ClipboardList,
+  PackageCheck,
   MonitorSmartphone,
+  ArrowUpRight,
 } from "lucide-react";
+import { useSession } from "@/lib/session";
+import { useRegister, personLabel } from "@/lib/store/use-register";
 import { PageHeader } from "@/components/page-header";
-import { SlipStatusBadge } from "@/components/status-badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { SlipStatusBadge } from "@/components/status-badge";
+import { StockNotifications } from "@/components/stock-notifications";
+import { MyAssets } from "@/components/employee-home";
+import { ItemIcon } from "@/components/catalog-controls";
 import { formatDate } from "@/lib/format";
-import { personName, useRegister } from "@/lib/store/use-register";
-
-export const Route = createFileRoute("/")({ component: Home });
-
-function Home() {
-  const people = useRegister((s) => s.people);
-  const assets = useRegister((s) => s.assets);
-  const items = useRegister((s) => s.items);
-  const slips = useRegister((s) => s.slips);
-  const events = useRegister((s) => s.events);
-  const office = useRegister((s) => s.settings.officeName);
-
-  const openSlips = slips.filter((s) => s.status === "open");
-  const awaiting = slips.filter((s) => s.status === "issued");
-  const low = items.filter((i) => i.qty <= i.minQty).sort((a, b) => a.qty - b.qty);
-  const inStore = assets.filter((a) => a.status === "in-store");
-  const live = slips
-    .filter((s) => s.status === "open" || s.status === "approved" || s.status === "issued")
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-
-  const user=useSession(s=>s.user)!;
-  if(user.role === "employee")return <EmployeeHome/>;
+export const Route = createFileRoute("/")({ component: Dashboard });
+function Dashboard() {
+  const user = useSession((s) => s.user)!;
+  const { slips, items, assets, people, settings } = useRegister();
+  const staff = user.role !== "employee";
+  const open = slips.filter((s) =>
+      ["open", "approved"].includes(s.status),
+    ).length,
+    awaiting = slips.filter((s) => s.status === "issued").length,
+    low = items.filter((i) => (i.availableQty ?? i.qty) < 10),
+    unallocated = assets.filter(
+      (a) => !a.holderId && a.status !== "condemned",
+    ).length;
+  const recent = [...slips]
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .slice(0, 5);
+  const cards = [
+    {
+      label: "Open requests",
+      value: open,
+      hint: "Waiting for issue",
+      icon: ClipboardList,
+      to: "/slips",
+      search: { tab: "open" },
+    },
+    {
+      label: "Awaiting receipt",
+      value: awaiting,
+      hint: staff ? "Issued · user to confirm" : "Please confirm your material",
+      icon: PackageCheck,
+      to: "/slips",
+      search: { tab: "issued" },
+    },
+    ...(staff
+      ? [
+          {
+            label: "Low stock items",
+            value: low.length,
+            hint: "Below 10 available",
+            icon: Archive,
+            to: "/stock",
+            search: { filter: "low" },
+          },
+          {
+            label: "Assets in store",
+            value: unallocated,
+            hint: "Unallocated assets",
+            icon: MonitorSmartphone,
+            to: "/assets",
+            search: { view: "store" },
+          },
+        ]
+      : [
+          {
+            label: "Received",
+            value: slips.filter((s) => s.status === "closed").length,
+            hint: "Completed requests",
+            icon: Archive,
+            to: "/slips",
+            search: { tab: "closed" },
+          },
+          {
+            label: "My assets",
+            value: assets.length,
+            hint: "Allocated to you",
+            icon: MonitorSmartphone,
+            to: "/assets",
+            search: {},
+          },
+        ]),
+  ];
   return (
-    <div className="mx-auto max-w-6xl space-y-8">
+    <div className="mx-auto max-w-6xl space-y-7">
       <PageHeader
-        eyebrow={office}
-        title="Store register"
-        description="See who holds each machine, what is left in the store, and which requests are waiting to be given."
+        eyebrow={settings.officeName}
+        title={
+          staff
+            ? "Your store, at a glance"
+            : "Hello, " + user.name.split(" ")[0]
+        }
+        description={
+          staff
+            ? "Material, people and assets — one clear view of your store."
+            : "Track your requests, confirm material received, and see your assets."
+        }
         actions={
-          <>
-            <Button asChild className="w-full sm:w-auto">
-              <Link to="/slips">New issue slip</Link>
-            </Button>
-            <Button asChild variant="outline" className="w-full sm:w-auto">
-              <Link to="/stock">Receive stock</Link>
-            </Button>
-          </>
+          <Button asChild>
+            <Link to={staff ? "/stock" : "/slips"}>
+              {staff ? "Open inventory" : "Request material"}
+            </Link>
+          </Button>
         }
       />
-
+      {staff && <StockNotifications banner />}
       <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat
-          label="Open slips"
-          value={openSlips.length}
-          hint="Waiting to issue"
-          to="/slips"
-          icon={ClipboardList}
-        />
-        <Stat
-          label="Awaiting receipt"
-          value={awaiting.length}
-          hint="Issued, not signed"
-          to="/slips"
-          icon={ClipboardList}
-        />
-        <Stat
-          label="Low stock"
-          value={low.length}
-          hint="At or below minimum"
-          to="/stock"
-          icon={Archive}
-        />
-        <Stat
-          label="Assets in store"
-          value={inStore.length}
-          hint="Unassigned machines"
-          to="/assets"
-          icon={MonitorSmartphone}
-        />
+        {cards.map((c) => (
+          <Link
+            key={c.label}
+            to={c.to}
+            search={c.search}
+            className="group rounded-2xl border bg-card p-5 shadow-sm transition hover:-translate-y-1 hover:border-primary/30 hover:shadow-md"
+          >
+            <div className="flex justify-between text-primary">
+              <c.icon className="size-5" />
+              <ArrowUpRight className="size-4 opacity-30 transition group-hover:opacity-100" />
+            </div>
+            <p className="mt-5 text-sm text-muted-foreground">{c.label}</p>
+            <p className="mt-1 text-3xl font-semibold tabular-nums">
+              {c.value}
+            </p>
+            <p className="mt-2 text-xs text-muted-foreground">{c.hint}</p>
+          </Link>
+        ))}
       </section>
-
-      <div className="grid gap-4 lg:grid-cols-5">
-        <Card className="lg:col-span-3">
-          <CardContent className="p-5">
-            <div className="mb-4 flex items-baseline justify-between gap-3">
-              <h2 className="font-serif text-xl font-semibold">Live slips</h2>
-              <Link to="/slips" className="text-sm text-primary hover:underline">
-                All slips
+      {!staff && awaiting > 0 && (
+        <Link
+          to="/slips"
+          search={{ tab: "issued" }}
+          className="receipt-pulse block rounded-2xl border border-orange-200 bg-orange-50 p-4 text-sm text-orange-800"
+        >
+          {awaiting} {awaiting === 1 ? "request is" : "requests are"} awaiting
+          your receipt confirmation. Tap to review.
+        </Link>
+      )}
+      <section className="rounded-2xl border bg-card p-5 sm:p-6">
+        <div className="mb-5 flex justify-between gap-3">
+          <h2 className="text-lg font-semibold">Recent requests</h2>
+          <Link
+            className="text-sm text-primary"
+            to="/slips"
+            search={{ tab: "all" }}
+          >
+            View all
+          </Link>
+        </div>
+        <div className="space-y-2">
+          {recent.map((s) => (
+            <Link
+              key={s.id}
+              to="/slips/$slipId"
+              params={{ slipId: s.id }}
+              className="flex flex-wrap items-center justify-between gap-3 rounded-xl p-3 transition hover:bg-muted"
+            >
+              <div>
+                <p className="text-sm font-semibold">
+                  {s.number}{" "}
+                  <span className="font-normal text-muted-foreground">
+                    · {personLabel(people, s.personId)}
+                  </span>
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {formatDate(s.createdAt)} ·{" "}
+                  {s.lines
+                    .map((l) => items.find((i) => i.id === l.itemId)?.name)
+                    .join(", ")}
+                </p>
+              </div>
+              <SlipStatusBadge status={s.status} />
+            </Link>
+          ))}
+          {!recent.length && (
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              Your requests will appear here.
+            </p>
+          )}
+        </div>
+      </section>
+      {staff ? (
+        <section className="rounded-2xl border bg-card p-5 sm:p-6">
+          <div className="mb-4 flex justify-between">
+            <h2 className="font-semibold">Stock to watch</h2>
+            <Link
+              className="text-sm text-primary"
+              to="/stock"
+              search={{ filter: "low" }}
+            >
+              View low stock
+            </Link>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {low.slice(0, 6).map((i) => (
+              <Link
+                to="/stock"
+                search={{ filter: "low" }}
+                key={i.id}
+                className="flex items-center gap-3 rounded-xl bg-muted/50 p-3"
+              >
+                <span className="rounded-xl bg-card p-3 text-primary">
+                  <ItemIcon name={i.name} icon={i.icon} />
+                </span>
+                <div className="flex-1">
+                  <p className="text-sm font-medium">{i.name}</p>
+                  <p className="text-xs text-muted-foreground">{i.make}</p>
+                </div>
+                <span
+                  className={
+                    (i.availableQty ?? i.qty) < 5
+                      ? "text-red-600"
+                      : "text-orange-600"
+                  }
+                >
+                  {i.availableQty ?? i.qty} {i.unit}
+                </span>
               </Link>
-            </div>
-            {live.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No open or issued slips.</p>
-            ) : (
-              <ul className="divide-y divide-border">
-                {live.map((slip) => (
-                  <li key={slip.id}>
-                    <Link
-                      to="/slips/$slipId"
-                      params={{ slipId: slip.id }}
-                      className="flex items-center gap-3 py-3 transition-colors hover:bg-muted/60"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <p className="font-medium">{slip.number}</p>
-                        <p className="truncate text-sm text-muted-foreground">
-                          {personName(people, slip.personId)} · {slip.purpose}
-                        </p>
-                      </div>
-                      <SlipStatusBadge status={slip.status} />
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className="lg:col-span-2">
-          <CardContent className="p-5">
-            <div className="mb-4 flex items-baseline justify-between gap-3">
-              <h2 className="font-serif text-xl font-semibold">Low stock</h2>
-              <Link to="/stock" className="text-sm text-primary hover:underline">
-                Catalogue
-              </Link>
-            </div>
-            {low.length === 0 ? (
-              <p className="text-sm text-muted-foreground">All items are above minimum.</p>
-            ) : (
-              <ul className="space-y-3">
-                {low.slice(0, 6).map((item) => (
-                  <li key={item.id} className="flex items-baseline justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="truncate font-medium">{item.name}</p>
-                      <p className="text-xs text-muted-foreground">Min {item.minQty} {item.unit}</p>
-                    </div>
-                    <p className="font-mono text-sm tabular-nums text-danger">
-                      {item.qty} {item.unit}
-                    </p>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
-          <CardContent className="p-5">
-            <h2 className="mb-4 font-serif text-xl font-semibold">Recent asset moves</h2>
-            {events.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No transfers recorded yet.</p>
-            ) : (
-              <ul className="space-y-3">
-                {events.slice(0, 5).map((ev) => {
-                  const asset = assets.find((a) => a.id === ev.assetId);
-                  return (
-                    <li key={ev.id} className="flex gap-3">
-                      <ArrowLeftRight className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-                      <div className="min-w-0">
-                        <p className="text-sm">
-                          <span className="font-medium">{asset?.assetNo ?? "Asset"}</span>
-                          {" · "}
-                          {ev.type === "swapped"
-                            ? "swapped"
-                            : ev.type === "returned"
-                              ? "unallocated / returned"
-                              : ev.type === "assigned"
-                                ? "assigned"
-                                : ev.type}
-                          {" · "}
-                          {personName(people, ev.fromHolderId)}
-                          {" → "}
-                          {personName(people, ev.toHolderId)}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {formatDate(ev.at)}
-                          {ev.note ? ` · ${ev.note}` : ""}
-                        </p>
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-5">
-            <h2 className="mb-4 font-serif text-xl font-semibold">On this desk</h2>
-            <ul className="space-y-2 text-sm">
-              <li className="flex gap-3 rounded-lg bg-muted/70 px-3 py-3">
-                <ClipboardList className="mt-0.5 size-4 text-primary" />
-                <span>
-                  User asks for material. Write a slip, issue from stock, then close it when they
-                  confirm receipt — same as signing the paper indent.
-                </span>
-              </li>
-              <li className="flex gap-3 rounded-lg bg-muted/70 px-3 py-3">
-                <ArrowDownToLine className="mt-0.5 size-4 text-primary" />
-                <span>
-                  After purchase arrives, receive it here. SAP requisition stays outside this
-                  register.
-                </span>
-              </li>
-              <li className="flex gap-3 rounded-lg bg-muted/70 px-3 py-3">
-                <MonitorSmartphone className="mt-0.5 size-4 text-primary" />
-                <span>
-                  Computers and printers move between people. Transfer, swap two machines, or run a
-                  quarterly review on the Assets page.
-                </span>
-              </li>
-            </ul>
-          </CardContent>
-        </Card>
-      </div>
+            ))}
+          </div>
+          {!low.length && (
+            <p className="text-sm text-muted-foreground">
+              All items have at least 10 available.
+            </p>
+          )}
+        </section>
+      ) : (
+        <MyAssets compact />
+      )}
     </div>
-  );
-}
-
-function Stat({
-  label,
-  value,
-  hint,
-  to,
-  icon: Icon,
-}: {
-  label: string;
-  value: number;
-  hint: string;
-  to: "/slips" | "/stock" | "/assets";
-  icon: typeof ClipboardList;
-}) {
-  return (
-    <Link to={to} className="block">
-      <Card className="h-full transition-[transform,box-shadow] duration-[var(--motion-quick)] ease-[var(--ease-out)] hover:-translate-y-0.5 hover:shadow-[var(--shadow-border-hover)] active:scale-[0.98]">
-        <CardContent className="flex flex-col gap-2 p-4 sm:p-5">
-          <div className="flex items-center justify-between">
-            <span className="flex size-8 items-center justify-center rounded-full bg-accent text-primary">
-              <Icon className="size-4" strokeWidth={1.75} />
-            </span>
-          </div>
-          <p className="text-3xl font-semibold tracking-tight tabular-nums">{value}</p>
-          <div>
-            <p className="text-sm font-medium">{label}</p>
-            <p className="text-xs text-muted-foreground">{hint}</p>
-          </div>
-        </CardContent>
-      </Card>
-    </Link>
   );
 }

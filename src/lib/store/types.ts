@@ -16,6 +16,7 @@ export interface Person {
   name: string;
   designation: string;
   section: string;
+  room?: string;
   status: PersonStatus;
 }
 
@@ -50,7 +51,10 @@ export interface InventoryItem {
   make: string;
   unit: string;
   minQty: number;
+  icon?: string;
   qty: number;
+  reservedQty?: number;
+  availableQty?: number;
 }
 
 export interface StockMove {
@@ -66,6 +70,8 @@ export interface StockMove {
 export interface SlipLine {
   itemId: string;
   qty: number;
+  approvedQty?: number;
+  issuedQty?: number;
 }
 
 export interface Slip {
@@ -82,6 +88,8 @@ export interface Slip {
   receiptProblem?: string;
   approvedAt?: string;
   approvedBy?: string;
+  updatedAt?: string;
+  approvalNote?: string;
 }
 
 export interface Settings {
@@ -98,6 +106,7 @@ export interface RegisterData {
   slips: Slip[];
   settings: Settings;
   slipSeq: number;
+  catalogs?:Record<string,string[]>;
   audit?: {id:string;status:string;startedAt:string;finishedAt?:string;by:string;baseline:Asset[];results:Record<string,string>;note?:string}|null;
   audits?: unknown[];
 }

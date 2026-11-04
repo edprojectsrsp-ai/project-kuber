@@ -1,9 +1,65 @@
-import { Link } from '@tanstack/react-router';
-import { useSession } from '@/lib/session';
-import { useRegister } from '@/lib/store/use-register';
-import { PageHeader } from './page-header';
-import { Button } from './ui/button';
-import { Card,CardContent } from './ui/card';
-import { SlipStatusBadge,AssetStatusBadge } from './status-badge';
-export function EmployeeHome(){const user=useSession(s=>s.user)!;const slips=useRegister(s=>s.slips);return <div className="mx-auto max-w-4xl space-y-6"><PageHeader eyebrow="My desk" title={`Hello, ${user.name.split(' ')[0]}`} description="Ask the store for material, confirm your receipts, and see the machines allocated to you." actions={<Button asChild><Link to="/slips">Request material</Link></Button>}/><div className="grid gap-4 sm:grid-cols-3">{[['Requests',slips.length],['Awaiting receipt',slips.filter(s=>s.status==='issued').length],['Received',slips.filter(s=>s.status==='closed').length]].map(([label,n])=><Card key={label}><CardContent className="p-5"><p className="text-sm text-muted-foreground">{label}</p><p className="mt-2 text-3xl font-semibold">{n}</p></CardContent></Card>)}</div><Card><CardContent className="space-y-4 p-5"><h2 className="text-lg font-semibold">My recent requests</h2>{slips.slice(0,6).map(s=><Link key={s.id} to="/slips/$slipId" params={{slipId:s.id}} className="flex items-center justify-between rounded-xl bg-muted p-3"><span>{s.number}</span><SlipStatusBadge status={s.status}/></Link>)}{!slips.length&&<p className="text-sm text-muted-foreground">Your requests will appear here.</p>}</CardContent></Card><MyAssets compact/></div>;}
-export function MyAssets({compact=false}:{compact?:boolean}){const assets=useRegister(s=>s.assets);return <div className="mx-auto max-w-4xl space-y-4">{!compact&&<PageHeader eyebrow="My register" title="My assets" description="The machines currently allocated to you. Contact the storekeeper if a number or room is incorrect."/>}{compact&&<h2 className="text-lg font-semibold">My assets</h2>}<div className="grid gap-3 sm:grid-cols-2">{assets.map(a=><Card key={a.id}><CardContent className="space-y-2 p-5"><p className="text-xs text-muted-foreground">{a.kind}</p><p className="text-lg font-semibold">{a.assetNo}</p><p className="text-sm">{a.make} {a.model}</p><p className="text-sm text-muted-foreground">Room {a.location||'—'} · Serial {a.serialNo||'—'}</p><AssetStatusBadge status={a.status}/></CardContent></Card>)}</div>{!assets.length&&<p className="text-sm text-muted-foreground">No assets are currently allocated to you.</p>}</div>;}
+import { useState } from "react";
+import { useRegister } from "@/lib/store/use-register";
+import { PageHeader } from "./page-header";
+import { SearchField } from "./search-field";
+import { Card, CardContent } from "./ui/card";
+import { AssetStatusBadge } from "./status-badge";
+import { ItemIcon } from "./catalog-controls";
+export function MyAssets({ compact = false }: { compact?: boolean }) {
+  const assets = useRegister((s) => s.assets);
+  const [q, setQ] = useState("");
+  const filtered = assets.filter((a) =>
+    [a.kind, a.assetNo, a.make, a.model, a.location, a.serialNo]
+      .join(" ")
+      .toLowerCase()
+      .includes(q.toLowerCase()),
+  );
+  return (
+    <div className="mx-auto max-w-4xl space-y-4">
+      {!compact && (
+        <PageHeader
+          eyebrow="My register"
+          title="My assets"
+          description="The machines allocated to you. All assigned assets follow your room. Contact the storekeeper to correct a room or asset number."
+        />
+      )}
+      {compact && <h2 className="text-lg font-semibold">My assets</h2>}
+      {!compact && (
+        <SearchField
+          value={q}
+          onChange={setQ}
+          placeholder="Search type, asset number, make, model, room or serial…"
+        />
+      )}
+      <div className="grid gap-3 sm:grid-cols-2">
+        {filtered.map((a) => (
+          <Card key={a.id}>
+            <CardContent className="space-y-2 p-5">
+              <div className="mb-3 flex items-center gap-3">
+                <span className="rounded-xl bg-accent p-3 text-primary">
+                  <ItemIcon name={a.kind} className="size-6" />
+                </span>
+                <span className="text-sm text-muted-foreground">{a.kind}</span>
+              </div>
+              <p className="text-lg font-semibold">{a.assetNo}</p>
+              <p className="text-sm">
+                {a.make} {a.model}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Room {a.location || "—"} · Serial {a.serialNo || "—"}
+              </p>
+              <AssetStatusBadge status={a.status} />
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+      {!filtered.length && (
+        <p className="text-sm text-muted-foreground">
+          {q
+            ? "No assets match your search."
+            : "No assets are currently allocated to you."}
+        </p>
+      )}
+    </div>
+  );
+}

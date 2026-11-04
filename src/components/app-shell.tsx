@@ -1,3 +1,5 @@
+import { AdminNotifications,ContactAdministrator } from './admin-notifications';
+import { StockNotifications } from "@/components/stock-notifications";
 import type { ReactNode } from "react";
 import { useSession, api } from "@/lib/session";
 import { Button } from "@/components/ui/button";
@@ -15,9 +17,9 @@ import { useRegister } from "@/lib/store/use-register";
 import { cn } from "@/lib/utils";
 
 const NAV = [
-  { to: "/", label: "Ledger", icon: LayoutGrid, exact: true },
-  { to: "/stock", label: "Stock", icon: Archive, exact: false },
-  { to: "/slips", label: "Slips", icon: ClipboardList, exact: false },
+  { to: "/", label: "Dashboard", icon: LayoutGrid, exact: true },
+  { to: "/stock", label: "Inventory", icon: Archive, exact: false },
+  { to: "/slips", label: "Material ledger", icon: ClipboardList, exact: false },
   { to: "/assets", label: "Assets", icon: MonitorSmartphone, exact: false },
   { to: "/people", label: "People", icon: Users, exact: false },
 ] as const;
@@ -34,9 +36,9 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const user = useSession(s=>s.user)!;
   const syncError=useRegister(s=>s.syncError);
-  const nav = user.role !== "employee" ? NAV : NAV.filter(n=>["/","/slips","/assets"].includes(n.to));
+  const nav = NAV.filter(n=>n.to!=="/people"||user.role==="admin");
   const logout=async()=>{await api("/logout",{});useSession.getState().setUser(null);};
-  const forbidden=user.role === "employee" && ["/people","/stock"].includes(pathname);
+  const forbidden=user.role !== "admin" && pathname === "/people";
 
   return (
     <div className="min-h-dvh overflow-x-hidden bg-background">
@@ -104,8 +106,8 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <main className="min-w-0 px-4 pt-5 pb-32 lg:ml-64 lg:px-8 lg:pt-8 lg:pb-10">
         {syncError&&<p role="alert" className="mb-4 rounded-xl bg-warn-soft p-3 text-sm text-warn">Connection interrupted. Displayed records may be out of date. Reconnect before saving.</p>}
-        <div className="mb-4 flex items-center justify-between gap-3 text-xs text-muted-foreground"><span>{user.name} · {user.role === "admin" ? "Administrator" : user.role === "store" ? "Storekeeper" : "User"} · Shared register</span><button className="lg:hidden text-primary" onClick={logout}>Sign out</button></div><div key={pathname} className="page-rise">
-          {forbidden ? <p>Storekeeper access required.</p> : children}
+        <div className="mb-4 flex items-center justify-between gap-3 text-xs text-muted-foreground"><span>{user.name} · {user.role === "admin" ? "Administrator" : user.role === "store" ? "Storekeeper" : "User"} · Shared register</span><div className="flex items-center gap-3">{user.role!=="employee"&&<StockNotifications/>}{user.role==="admin"?<AdminNotifications/>:<ContactAdministrator compact/>}<button className="lg:hidden text-primary" onClick={logout}>Sign out</button></div></div><div key={pathname} className="page-rise">
+          {forbidden ? <p>Administrator access required.</p> : children}
         </div>
       </main>
 

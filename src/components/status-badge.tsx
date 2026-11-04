@@ -5,12 +5,12 @@ export function SlipStatusBadge({ status }: { status: SlipStatus }) {
   const label =
     status === "open"
       ? "Open"
-      : status === "approved" ? "Approved" : status === "issued"
+      : status === "approved" ? "Open" : status === "issued"
         ? "Awaiting receipt"
         : status === "closed"
-          ? "Closed"
+          ? "Received"
           : "Cancelled";
-  return <Badge variant={status === "approved" ? "issued" : status}>{label}</Badge>;
+  return <Badge className={status === "issued" ? "receipt-pulse" : undefined} variant={status === "approved" ? "open" : status}>{label}</Badge>;
 }
 
 export function AssetStatusBadge({ status }: { status: AssetStatus }) {
