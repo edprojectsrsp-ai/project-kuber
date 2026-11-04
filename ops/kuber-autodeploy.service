@@ -1,0 +1,12 @@
+[Unit]
+Description=Check Project Kuber main and queue a Coolify deployment when changed
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/opt/kuber-autodeploy
+ExecStart=/usr/bin/python3 /opt/kuber-autodeploy/coolify-poll.py
+TimeoutStartSec=110
+NoNewPrivileges=true

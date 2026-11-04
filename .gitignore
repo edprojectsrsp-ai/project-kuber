@@ -31,3 +31,4 @@ fixes-update.mjs
 final-update.mjs
 
 *.key.txt
+__pycache__/

@@ -1,0 +1,11 @@
+[Unit]
+Description=Check Project Kuber GitHub main every minute
+
+[Timer]
+OnBootSec=45s
+OnUnitActiveSec=60s
+RandomizedDelaySec=5s
+Unit=kuber-autodeploy.service
+
+[Install]
+WantedBy=timers.target
