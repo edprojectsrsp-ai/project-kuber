@@ -1,6 +1,6 @@
 # Project Kuber · Store Ledger
 
-The first ZIP's React interface and person-by-person asset audit, with a shared SQLite register and authenticated server.
+Departmental consumables, asset records and approval workflows with an authenticated server. SQLite supports local use, and MySQL supports the deployed shared register.
 
 ## Run on Windows
 
@@ -17,7 +17,7 @@ Initial demonstration accounts:
 
 The welcome screen offers avatar cards for Storekeeper and User, followed by the selected account's username/password form. Administrator sign-in is a smaller separate link. Existing employee and storekeeper passwords are unchanged. The selected portal is validated against the account role on the server. On a clean register where the storekeeper already uses username `admin`, the separate administrator defaults to `administrator`; `KUBER_ADMIN_LOGIN` can specify its username.
 
-The initial register contains demonstration records copied from the first prototype. No live office records have been imported. Only administrators can access People and create or edit employee records. New accounts default to their personnel number as password; employees can change it later from their profile. Administrators can set a new password or reset to the personnel number. Password hashes cannot be viewed. Settings imports people/assets from CSV or copied Excel cells, with all-or-nothing validation.
+New registers install the departmental catalogue of 70 distinct consumables (71 supplied rows, with RULLED REGISTER repeated). Opening quantities are zero. On upgrade, the previous catalogue is archived, its history remains readable, and pending material requests for the replaced items are cancelled. A consistent database backup is taken before this migration. Only administrators can access People and create or edit employee records. New accounts default to their personnel number as password; employees can change it later from their profile. Administrators can set a new password or reset to the personnel number. Password hashes cannot be viewed. Settings imports people/assets from CSV or copied Excel cells, with all-or-nothing validation.
 
 Forgot password on the login form sends a reset request to the administrator. Signed-in users and storekeepers can also select Contact administrator. A notification appears on the administrator bell; the administrator verifies the person and resets their password from the bell or People. Existing sessions are revoked on reset. No email service is required. Administrator account recovery requires the server maintainer.
 
@@ -34,10 +34,26 @@ The current local background server can be stopped with `stop-local.ps1` and res
 - Receipt problems remain visible to the storekeeper until the employee confirms resolution.
 - Stock receipts and physical count adjustments are recorded with history. Purchasing stays in SAP.
 - The original CPU/monitor/printer slots remain. Assigning a different machine moves the holder reference; a displaced machine becomes unallocated and requires location verification. Asset numbers/makes stay attached to the machine.
-- Room belongs to the person. Edit it in People or the room badge in the audit board; all their assigned assets follow it, including after transfers and swaps. Unassigned assets retain a separate store location. On first upgrade a backup is taken and a person's most common existing asset room initializes their room; conflicting asset locations are reconciled with history entries.
+- Each asset can retain its own room. Administrator reconciliation can update a person's default room and existing allocations. The default room belongs to the person. Edit it in People or the room badge in the audit board; all their assigned assets follow it, including after transfers and swaps. Unassigned assets retain a separate store location. On first upgrade a backup is taken and a person's most common existing asset room initializes their room; conflicting asset locations are reconciled with history entries.
 - Dashboard cards open the corresponding filtered requests, low-stock list or unallocated assets. Recent requests show the latest five. Inventory supports cards/list, search across names/makes/categories/units/quantities, red below 5 available, orange 5–9 and green at 10+. Makes, categories, units and asset types can be added inline and persist; item names autocomplete and icons can be selected. Minimum catalogue quantity is 1; opening stock can be zero.
 - Transfers, two-machine swaps, and retirement handovers preserve history. Retirement handovers are committed atomically.
 - Start an audit, verify or mark missing assets, use the original slot editor for allocation changes, and finish with an exception note if any assets remain unchecked. The dated audit and baseline are retained.
+
+## Asset records and change requests
+
+Assets record ASR, ID, description, make, room and remarks. Air conditioners also record Split/Window/Tower type and capacity in tonnes. Furniture records material, initially Wood/Steel. Types, makes, ASRs, IDs, rooms, capacities and materials use saved options with inline creation. Description and remarks are free text.
+
+Employees use Contact store / Request asset change for transfers, replacements, room changes and returns. The store prepares the recipient, room and optional available replacement. A separate store in-charge approves or rejects the proposal. Approval updates allocations and history together. The requester and preparer cannot approve their own proposal. Administrators nominate an in-charge in Profile & settings; otherwise an administrator reviews. Administrator audit reconciliation and retirement handovers remain available for maintenance.
+
+Employee directory imports retain RSP number (login), SAIL number, designation, department and supplied contact fields. Residential addresses are separate from office rooms. Personal directory data stays in the database, outside source control.
+
+## MySQL deployment
+
+Set runtime-only `MYSQL_URL=mysql://USER:PASSWORD@INTERNAL_HOST:3306/kuber`. Use a private MySQL 8 service and persistent storage. `MYSQL_SSL=true` enables verified TLS where supported. Without MYSQL_URL, the app uses DB_FILE or data/kuber.db. When MySQL is empty and DB_FILE exists, the app backs up and imports the SQLite register, accounts and history before serving requests. Existing MySQL data is never overwritten by this automatic migration. The source SQLite file remains available for recovery.
+
+The MySQL account needs schema and data permissions within the application database. Runtime writes lock the register row, validate the revision and commit register/account/history changes together. GET /api/health verifies database connectivity and reports the engine. Database backups use the portable SQLite snapshot format for both engines. Stop the application before running the restore script with the same MYSQL_URL to restore MySQL; restored sessions are revoked.
+
+`node server/integration-test.mjs` tests SQLite locally. With MYSQL_URL set, the same checks use isolated qa_* MySQL tables and remove only those test tables afterwards. GitHub checks exercise both engines.
 
 ## Data and backups
 

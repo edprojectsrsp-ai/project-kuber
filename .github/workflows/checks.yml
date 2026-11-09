@@ -3,6 +3,19 @@ on: [push, pull_request]
 jobs:
   verify:
     runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: integration-only-password
+          MYSQL_DATABASE: kuber_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -pintegration-only-password"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -13,3 +26,9 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: node server/integration-test.mjs
+      - run: node server/integration-test.mjs
+        env:
+          MYSQL_URL: mysql://root:integration-only-password@127.0.0.1:3306/kuber_test
+      - run: node server/mysql-migration-test.mjs
+        env:
+          MYSQL_URL: mysql://root:integration-only-password@127.0.0.1:3306/kuber_test

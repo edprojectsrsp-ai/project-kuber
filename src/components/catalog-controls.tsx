@@ -168,11 +168,15 @@ export function CatalogSelect({
   value,
   onChange,
   label,
+  allowCreate = true,
+  disabled = false,
 }: {
   kind: string;
   value: string;
   onChange: (v: string) => void;
   label: string;
+  allowCreate?: boolean;
+  disabled?: boolean;
 }) {
   const options = useRegister((s) => s.catalogs?.[kind] || []),
     add = useRegister((s) => s.addCatalogOption);
@@ -182,6 +186,7 @@ export function CatalogSelect({
   return (
     <div className="space-y-2">
       <select
+        disabled={disabled}
         aria-label={label}
         className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm"
         value={value}
@@ -198,7 +203,7 @@ export function CatalogSelect({
             {v}
           </option>
         ))}
-        <option value="__new__">＋ Add new {label.toLowerCase()}…</option>
+        {allowCreate && <option value="__new__">＋ Add new {label.toLowerCase()}…</option>}
       </select>
       {creating && (
         <div className="flex gap-2">
@@ -220,6 +225,8 @@ export function CatalogSelect({
                 onChange(v);
                 setCreating(false);
                 toast.success(`${label} saved`);
+              } catch (error) {
+                toast.error((error as Error).message);
               } finally {
                 setBusy(false);
               }

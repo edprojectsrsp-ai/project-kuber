@@ -172,7 +172,8 @@ function RequestForm({ slip, onClose }: { slip?: Slip; onClose: () => void }) {
           {error}
         </p>
       )}
-      <DialogFooter>
+      {items.some(item=>item.sampleBalance) && <p className="text-sm text-amber-700">Some available quantities are sample balances awaiting physical verification.</p>}
+        <DialogFooter>
         <Button type="button" variant="outline" onClick={onClose}>
           Cancel
         </Button>

@@ -1,3 +1,7 @@
+# Verification - 9 November 2026
+
+Departmental catalogue replacement, ASR/AC/furniture fields, reusable options, independent asset approval, employee directory import and MySQL persistence are implemented. Local checks passed 24 domain tests, expanded HTTP workflows, portable backup/restore with session revocation, concurrent revision rejection and the production build. Browser verification created an AC using saved options, submitted its allocation as storekeeper and approved it using a separate administrator. Earlier verification notes below describe previous releases.
+
 # Verification · 14 October 2026
 
 ## Request and inventory refinement · 15 October 2026

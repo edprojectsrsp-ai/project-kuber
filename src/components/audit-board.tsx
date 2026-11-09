@@ -1,3 +1,4 @@
+import { useSession } from '@/lib/session';
 import { ItemIcon } from './catalog-controls';
 import { askText } from "@/components/text-prompt";
 import { useMemo, useState } from "react";
@@ -25,6 +26,7 @@ function heldOf(assets: Asset[], personId: string, kind: string) {
 }
 
 export function AuditBoard() {
+  const canReconcile=useSession(s=>s.user?.role==='admin');
   const assets = useRegister((s) => s.assets);
   const people = useRegister((s) => s.people);
   const audit=useRegister(s=>s.audit);
@@ -65,7 +67,7 @@ export function AuditBoard() {
             <Card>
               <CardContent className="grid gap-3 p-4">
                 <div>
-                  <div className="flex flex-wrap items-center justify-between gap-2"><p className="font-medium">{person.name}</p><button className="room-chip" onClick={async()=>{const room=await askText(`Room for ${person.name}`,person.room||"");if(room!==null){await updateRoom(person.id,room);toast.success("Room updated for all assigned assets");}}}>Room {person.room||"Not set"} · Edit</button></div>
+                  <div className="flex flex-wrap items-center justify-between gap-2"><p className="font-medium">{person.name}</p><button disabled={!canReconcile} className="room-chip" onClick={async()=>{const room=await askText(`Room for ${person.name}`,person.room||"");if(room!==null){await updateRoom(person.id,room);toast.success("Room updated for all assigned assets");}}}>Room {person.room||"Not set"} · Edit</button></div>
                   <p className="text-sm text-muted-foreground">
                     {person.personnelNo || "No personnel no."} · {person.designation}
                   </p>
@@ -77,7 +79,7 @@ export function AuditBoard() {
                       <button
                         key={kind}
                         type="button"
-                        onClick={() => setSlot({ personId: person.id, kind })}
+                        disabled={!canReconcile} onClick={() => setSlot({ personId: person.id, kind })}
                         className="rounded-xl bg-muted px-3 py-3 text-left transition-colors hover:bg-accent"
                       >
                         <p className="flex items-center gap-2 text-xs font-medium text-muted-foreground"><ItemIcon name={kind} className="size-4"/>{kind}</p>
@@ -110,7 +112,7 @@ export function AuditBoard() {
                 <li key={asset.id}>
                   <button
                     type="button"
-                    onClick={() => setLoose(asset)}
+                    disabled={!canReconcile} onClick={() => setLoose(asset)}
                     className="w-full rounded-xl bg-muted px-3 py-3 text-left transition-colors hover:bg-accent"
                   >
                     <p className="font-medium">

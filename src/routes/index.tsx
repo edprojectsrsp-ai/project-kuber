@@ -1,3 +1,4 @@
+import { AssetRequests } from '@/components/asset-requests';
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   Archive,
@@ -18,7 +19,8 @@ import { formatDate } from "@/lib/format";
 export const Route = createFileRoute("/")({ component: Dashboard });
 function Dashboard() {
   const user = useSession((s) => s.user)!;
-  const { slips, items, assets, people, settings } = useRegister();
+  const { slips, items, assets, people, settings, archivedItems } = useRegister();
+  const historyItems = [...items, ...(archivedItems || [])];
   const staff = user.role !== "employee";
   const open = slips.filter((s) =>
       ["open", "approved"].includes(s.status),
@@ -168,7 +170,7 @@ function Dashboard() {
                 <p className="mt-1 text-xs text-muted-foreground">
                   {formatDate(s.createdAt)} ·{" "}
                   {s.lines
-                    .map((l) => items.find((i) => i.id === l.itemId)?.name)
+                    .map((l) => historyItems.find((i) => i.id === l.itemId)?.name)
                     .join(", ")}
                 </p>
               </div>
@@ -228,7 +230,7 @@ function Dashboard() {
           )}
         </section>
       ) : (
-        <MyAssets compact />
+        <><MyAssets compact /><AssetRequests/></>
       )}
     </div>
   );

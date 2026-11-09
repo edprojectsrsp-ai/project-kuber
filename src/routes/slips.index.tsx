@@ -32,7 +32,8 @@ const tabs = [
 ];
 function SlipsPage() {
   const user = useSession((s) => s.user)!;
-  const { slips, people, items } = useRegister();
+  const { slips, people, items: activeItems, archivedItems } = useRegister();
+  const items = [...activeItems, ...(archivedItems || [])];
   const { tab = "all" } = Route.useSearch();
   const navigate = useNavigate();
   const [q, setQ] = useState(""),

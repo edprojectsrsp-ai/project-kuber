@@ -32,7 +32,9 @@ function SlipDetail() {
   const navigate = useNavigate();
   const slip = useRegister((s) => s.slips.find((x) => x.id === slipId));
   const people = useRegister((s) => s.people);
-  const items = useRegister((s) => s.items);
+  const activeItems = useRegister((s) => s.items);
+  const archivedItems = useRegister(s=>s.archivedItems);
+  const items = [...activeItems, ...(archivedItems || [])];
   const confirmSlip = useRegister((s) => s.confirmSlip);
   const cancelSlip = useRegister((s) => s.cancelSlip);
   const person = people.find((p) => p.id === slip?.personId);

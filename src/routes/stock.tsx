@@ -75,6 +75,7 @@ function StockPage() {
     .sort((a, b) => a.name.localeCompare(b.name));
   return (
     <div className="mx-auto max-w-6xl space-y-6">
+      {items.some(item=>item.sampleBalance) && <p role="status" className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">Sample opening balances are present for setup. Record verified quantities using physical count adjustment.</p>}
       <PageHeader
         eyebrow="Material catalogue"
         title="Inventory"

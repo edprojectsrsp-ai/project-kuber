@@ -1,3 +1,4 @@
+import { AssetRequests } from '@/components/asset-requests';
 import { ItemIcon,CatalogSelect } from '@/components/catalog-controls';
 import { useSession } from "@/lib/session";
 import { MyAssets } from "@/components/employee-home";
@@ -41,7 +42,7 @@ function AssetsPage() {
   const [q, setQ] = useState("");
   const [kind, setKind] = useState("all");
   const [holder, setHolder] = useState("all");
-  const [mode, setMode] = useState<"audit" | "register">("audit");
+  const [mode, setMode] = useState<"audit" | "register">("register");
   const [editing, setEditing] = useState<Asset | null | "new">(null);
   const [transfer, setTransfer] = useState<Asset | null>(null);
   const [swapA, setSwapA] = useState<string>("");
@@ -60,7 +61,7 @@ function AssetsPage() {
       .filter((a) => {
         if (!query) return true;
         const who = personName(people, a.holderId).toLowerCase();
-        return `${a.assetNo} ${a.kind} ${a.make} ${a.model} ${a.serialNo} ${who} ${a.location}`
+        return `${a.assetNo} ${a.asr || ""} ${a.kind} ${a.make} ${a.model} ${a.acType || ""} ${a.capacity || ""} ${a.material || ""} ${a.notes} ${a.serialNo} ${who} ${a.location}`
           .toLowerCase()
           .includes(query);
       })
@@ -68,16 +69,16 @@ function AssetsPage() {
   }, [assets, kind, holder, q, people]);
 
   const user=useSession(s=>s.user)!;
-  if(user.role === "employee")return <MyAssets/>;
+  if(user.role === "employee")return <div className="space-y-6"><MyAssets/><AssetRequests/></div>;
   return (
     <div className="mx-auto max-w-6xl space-y-6">
       <PageHeader
         eyebrow="Register"
         title="Assets"
-        description="Audit who has the CPU, monitor and printer. The number and brand stay on the machine. Only the person and room change."
+        description="Maintain ASR, description, make, ID, room and allocation for computers, air conditioners and furniture."
         actions={
           <>
-            <Button variant="outline" onClick={() => setOpenSwap(true)}>
+            <Button variant="outline" disabled={user.role !== "admin"} onClick={() => setOpenSwap(true)}>
               <ArrowLeftRight className="size-4" />
               Swap two
             </Button>
@@ -93,7 +94,7 @@ function AssetsPage() {
         <Tabs value={mode} onValueChange={(v) => setMode(v as "audit" | "register")}>
           <TabsList>
             <TabsTrigger value="audit">Audit</TabsTrigger>
-            <TabsTrigger value="register">All machines</TabsTrigger>
+            <TabsTrigger value="register">All assets</TabsTrigger>
           </TabsList>
         </Tabs>
         <div className={mode === "audit" ? "hidden" : "flex flex-col gap-3 sm:flex-row"}>
@@ -129,7 +130,7 @@ function AssetsPage() {
         <EmptyState
           icon={MonitorSmartphone}
           title="No assets match"
-          hint="Add machines as they are numbered in the physical register."
+          hint="Add assets using their ASR and identification details."
           action={
             <Button onClick={() => setEditing("new")}>
               <Plus className="size-4" />
@@ -162,6 +163,7 @@ function AssetsPage() {
                       >
                         {asset.assetNo}
                       </button>
+                      <p className="text-xs text-muted-foreground">ASR {asset.asr || "—"}</p>
                     </td>
                     <td className="px-4 py-3">
                       <ItemIcon name={asset.kind} className="mr-2 inline size-4"/>{asset.kind} · {asset.make} {asset.model}
@@ -220,6 +222,7 @@ function AssetsPage() {
         </>
       )}
 
+      <AssetRequests/>
       <AssetDialog
         asset={editing === "new" ? null : editing}
         open={editing !== null}
@@ -272,11 +275,20 @@ function AssetDialog({
   const [holderId, setHolderId] = useState("store");
   const [location, setLocation] = useState("");
   const [notes, setNotes] = useState("");
+  const [asr, setAsr] = useState("");
+  const [acType, setAcType] = useState("");
+  const [capacity, setCapacity] = useState("");
+  const [material, setMaterial] = useState("");
+  const [busy, setBusy] = useState(false);
+  const user = useSession(s=>s.user)!;
+  const canAllocate = !asset || user.role === 'admin';
+  const isAc = /air.?condition|^ac$/i.test(kind);
+  const isFurniture = !/CPU|Monitor|Laptop|Printer|UPS|Scanner|Projector|Network switch/i.test(kind) && !isAc;
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent
-        className="max-w-xl"
+        className="max-w-xl max-h-[90vh] overflow-y-auto"
         onOpenAutoFocus={() => {
           setAssetNo(asset?.assetNo ?? "");
           setKind(asset?.kind ?? ASSET_KINDS[0]);
@@ -286,32 +298,38 @@ function AssetDialog({
           setHolderId(asset?.holderId ?? "store");
           setLocation(asset?.location ?? "");
           setNotes(asset?.notes ?? "");
+          setAsr(asset?.asr ?? "");
+          setAcType(asset?.acType ?? "");
+          setCapacity(asset?.capacity ?? "");
+          setMaterial(asset?.material ?? "");
         }}
       >
         <DialogHeader>
           <DialogTitle>{asset ? "Edit asset" : "Add asset"}</DialogTitle>
           <DialogDescription>
-            Keep the asset number as painted on the machine. Change the holder when it moves.
+            Enter the asset identification and room. Use an asset change request for transfers and room changes.
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="Asset no." htmlFor="as-no">
-            <Input id="as-no" value={assetNo} onChange={(e) => setAssetNo(e.target.value)} placeholder="CPU-014" />
-          </Field>
+          <Field label="ASR"><CatalogSelect label="ASR" kind="asrs" value={asr} onChange={setAsr}/></Field>
+          <Field label="ID"><CatalogSelect label="Asset ID" kind="assetIds" value={assetNo} onChange={setAssetNo}/></Field>
           <Field label="Kind">
             <CatalogSelect label="Asset type" kind="assetKinds" value={kind} onChange={setKind}/>
           </Field>
           <Field label="Make" htmlFor="as-make">
             <CatalogSelect label="Make" kind="makes" value={make} onChange={setMake}/>
           </Field>
-          <Field label="Model" htmlFor="as-model">
+          <Field label="Description / name" htmlFor="as-model">
             <Input id="as-model" value={model} onChange={(e) => setModel(e.target.value)} />
           </Field>
-          <Field label="Serial no." htmlFor="as-sn">
-            <Input id="as-sn" value={serialNo} onChange={(e) => setSerialNo(e.target.value)} />
-          </Field>
+          <Field label="Serial no."><CatalogSelect label="Serial no." kind="serials" value={serialNo} onChange={setSerialNo}/></Field>
+          {isAc && <>
+            <Field label="Air conditioner type"><CatalogSelect label="AC type" kind="acTypes" value={acType} onChange={setAcType}/></Field>
+            <Field label="Capacity (tonnes)"><CatalogSelect label="Capacity" kind="capacities" value={capacity} onChange={setCapacity}/></Field>
+          </>}
+          {isFurniture && <Field label="Material"><CatalogSelect label="Material" kind="materials" value={material} onChange={setMaterial}/></Field>}
           <Field label="With">
-            <Select value={holderId} onValueChange={setHolderId}>
+            <Select disabled={!canAllocate} value={holderId} onValueChange={v=>{setHolderId(v);if(v!=="store")setLocation(people.find(p=>p.id===v)?.room||"");}}>
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
@@ -325,10 +343,10 @@ function AssetDialog({
               </SelectContent>
             </Select>
           </Field>
-          <Field label={holderId === "store" ? "Store location" : "Room · follows person"} htmlFor="as-loc" className="sm:col-span-2">
-            <Input id="as-loc" disabled={holderId !== "store"} value={holderId === "store" ? location : people.find(p=>p.id===holderId)?.room || "Room not set"} onChange={(e) => setLocation(e.target.value)} placeholder="EE cabin" />
+          <Field label="Room no." className="sm:col-span-2">
+            <CatalogSelect label="Room no." kind="rooms" disabled={!canAllocate} value={location} onChange={setLocation}/>
           </Field>
-          <Field label="Notes" htmlFor="as-notes" className="sm:col-span-2">
+          <Field label="Remarks" htmlFor="as-notes" className="sm:col-span-2">
             <Textarea id="as-notes" value={notes} onChange={(e) => setNotes(e.target.value)} />
           </Field>
         </div>
@@ -337,17 +355,24 @@ function AssetDialog({
             Cancel
           </Button>
           <Button
+            disabled={busy}
             onClick={async () => {
               if (!assetNo.trim()) {
                 toast.error("Asset number is required");
                 return;
               }
+              if (!kind || !asr || !make || !model.trim() || !location || (isAc && (!acType || !capacity)) || (isFurniture && !material)) {
+                toast.error("Complete ASR, type, description, make, room and the relevant specifications.");return;
+              }
+              setBusy(true);
+              try {
               const holder = holderId === "store" ? null : holderId;
               const status = holder ? "in-use" : "in-store";
               if (asset) {
                 await updateAsset(asset.id, {
                   assetNo: assetNo.trim(),
                   kind,
+                  asr, acType: isAc ? acType : '', capacity: isAc ? capacity : '', material: isFurniture ? material : '',
                   make: make.trim(),
                   model: model.trim(),
                   serialNo: serialNo.trim(),
@@ -361,6 +386,7 @@ function AssetDialog({
                 await addAsset({
                   assetNo: assetNo.trim(),
                   kind,
+                  asr, acType: isAc ? acType : '', capacity: isAc ? capacity : '', material: isFurniture ? material : '',
                   make: make.trim(),
                   model: model.trim(),
                   serialNo: serialNo.trim(),
@@ -372,6 +398,7 @@ function AssetDialog({
                 toast.success("Asset added");
               }
               onClose();
+              } catch(error) { toast.error((error as Error).message); } finally { setBusy(false); }
             }}
           >
             Save
@@ -403,7 +430,7 @@ function TransferDialog({ asset, onClose }: { asset: Asset | null; onClose: () =
         <DialogHeader>
           <DialogTitle>Transfer {asset?.assetNo}</DialogTitle>
           <DialogDescription>
-            Hand this machine to another person, or return it to store. The number does not change.
+            Propose a transfer or return to store. Allocation changes take effect after in-charge approval.
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-4">
@@ -425,9 +452,7 @@ function TransferDialog({ asset, onClose }: { asset: Asset | null; onClose: () =
               </SelectContent>
             </Select>
           </Field>
-          <Field label={to === "store" ? "Store location" : "Room · follows person"} htmlFor="tr-loc">
-            <Input id="tr-loc" disabled={to !== "store"} value={to === "store" ? location : people.find(p=>p.id===to)?.room || "Room not set"} onChange={(e) => setLocation(e.target.value)} />
-          </Field>
+          <Field label="Room no."><CatalogSelect label="Room no." kind="rooms" value={location} onChange={setLocation}/></Field>
           <Field label="Note" htmlFor="tr-note">
             <Input
               id="tr-note"
@@ -445,12 +470,12 @@ function TransferDialog({ asset, onClose }: { asset: Asset | null; onClose: () =
             onClick={async () => {
               if (!asset) return;
               const next = to === "store" ? null : to;
-              await transferAsset(asset.id, next, note.trim(), next ? undefined : location.trim());
-              toast.success(`${asset.assetNo} transferred`);
+              await transferAsset(asset.id, next, note.trim(), location.trim());
+              toast.success(`${asset.assetNo} submitted for in-charge approval`);
               onClose();
             }}
           >
-            Save transfer
+            Submit for approval
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -572,6 +597,9 @@ function AssetDetailDialog({
               </DialogDescription>
             </DialogHeader>
             <div className="grid gap-2 text-sm">
+              <p><span className="text-muted-foreground">ASR</span> {asset.asr || "—"}</p>
+              {asset.acType && <p>AC type {asset.acType} · {asset.capacity} tonnes</p>}
+              {asset.material && <p>Material {asset.material}</p>}
               <p>
                 <span className="text-muted-foreground">Serial</span> {asset.serialNo || "—"}
               </p>

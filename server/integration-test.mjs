@@ -1,11 +1,12 @@
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { mkdtempSync,rmSync,writeFileSync } from 'node:fs';
 import Database from 'better-sqlite3';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import assert from 'node:assert/strict';
 const dir=mkdtempSync(path.join(tmpdir(),'kuber-integration-'));
-const child=spawn(process.execPath,['server/server.mjs'],{cwd:process.cwd(),env:{...process.env,PORT:'4332',DB_FILE:path.join(dir,'test.db')},windowsHide:true});let output='';child.stdout.on('data',b=>output+=b);child.stderr.on('data',b=>output+=b);
+const testPrefix=process.env.MYSQL_URL?`qa_${Date.now()}_`:'';
+const child=spawn(process.execPath,['server/server.mjs'],{cwd:process.cwd(),env:{...process.env,PORT:'4332',MYSQL_TABLE_PREFIX:testPrefix,DB_FILE:path.join(dir,'test.db')},windowsHide:true});let output='';child.stdout.on('data',b=>output+=b);child.stderr.on('data',b=>output+=b);
 const jars={};
 async function api(key,route,body){const r=await fetch('http://127.0.0.1:4332/api'+route,{method:body===undefined?'GET':'POST',headers:{'Content-Type':'application/json',Cookie:jars[key]||''},body:body===undefined?undefined:JSON.stringify(body)});const c=r.headers.get('set-cookie');if(c)jars[key]=c.split(';')[0];return {status:r.status,body:r.headers.get('content-type')?.includes('json')?await r.json():await r.arrayBuffer()};}
 try{
@@ -17,7 +18,7 @@ try{
  await api('s','/login',{personnelNo:'103900',password:'Kuber@2026'});assert.equal((await api('s','/register')).status,200);
  await api('s','/password',{old:'Kuber@2026',password:'Test-Store-Password-2026!'});assert.equal((await api('s','/register')).status,401);await api('s','/login',{personnelNo:'103900',password:'Test-Store-Password-2026!'});
  await api('e','/login',{personnelNo:'104821',password:'Kuber@2026'});await api('e','/password',{old:'Kuber@2026',password:'Test-Employee-Password-2026!'});await api('e','/login',{personnelNo:'104821',password:'Test-Employee-Password-2026!'});
- const state=(await api('s','/register')).body;assert.equal((await api('e','/action',{revision:state.revision,action:'receiveStock',args:[state.data.items[0].id,1,'Denied']})).status,403);
+ let state=(await api('s','/register')).body;const stocked=await api('s','/action',{revision:state.revision,action:'receiveStock',args:[state.data.items[0].id,100,'Isolated integration test stock']});assert.equal(stocked.status,200);state=stocked.body;assert.equal((await api('e','/action',{revision:state.revision,action:'receiveStock',args:[state.data.items[0].id,1,'Denied']})).status,403);
  const create=await api('e','/action',{revision:state.revision,action:'createSlip',args:[{personId:'p2',lines:[{itemId:state.data.items[0].id,qty:1}]}]});assert.equal(create.status,200);const req=create.body.result;
  assert.equal((await api('s','/action',{revision:state.revision,action:'approveSlip',args:[req]})).status,409);
  const approved=await api('s','/action',{revision:create.body.revision,action:'approveSlip',args:[req]});assert.equal(approved.status,200);
@@ -28,13 +29,49 @@ try{
  const imported=await api('a','/action',{revision:closed.body.revision,action:'importRows',args:[{kind:'people',rows:[{personnel_no:'NEW-TEST',name:'New Person'},{personnel_no:'104821',name:'Duplicate'}]}],initialPassword:'Temporary-Test-2026!'});assert.equal(imported.status,409);assert.equal((await api('s','/register')).body.revision,closed.body.revision);assert.ok(!(await api('s','/register')).body.data.people.some(p=>p.personnelNo==='NEW-TEST'));
  assert.equal((await api('e','/backup')).status,403);const backup=await api('s','/backup');assert.equal(backup.status,200);assert.ok(backup.body.byteLength>1000);const backupPath=path.join(dir,'downloaded.db');writeFileSync(backupPath,Buffer.from(backup.body));const restored=new Database(backupPath,{readonly:true});assert.equal(restored.pragma('integrity_check',{simple:true}),'ok');assert.equal(JSON.parse(restored.prepare('SELECT data FROM register').get().data).slips.find(s=>s.id===req).status,'closed');assert.equal(restored.prepare('SELECT count(*) n FROM accounts').get().n,state.data.people.length);restored.close();
  const partialState=(await api('s','/register')).body;const partialItem=partialState.data.items[0];const partial=await api('e','/action',{revision:partialState.revision,action:'createSlip',args:[{personId:'p1',lines:[{itemId:partialItem.id,qty:2}]}]});assert.equal(partial.status,200);const partialApproved=await api('s','/action',{revision:partial.body.revision,action:'approveSlip',args:[partial.body.result,[{itemId:partialItem.id,qty:1}],'One for now']});assert.equal(partialApproved.status,200);assert.equal(partialApproved.body.data.items[0].qty,partialItem.qty);assert.equal(partialApproved.body.data.items[0].reservedQty,1);const partialIssued=await api('s','/action',{revision:partialApproved.body.revision,action:'issueSlip',args:[partial.body.result]});assert.equal(partialIssued.status,200);assert.equal(partialIssued.body.data.items[0].qty,partialItem.qty-1);
- const changedRoom=await api('s','/action',{revision:partialIssued.body.revision,action:'updateRoom',args:['p1','Room 501']});assert.equal(changedRoom.status,200);assert.ok(changedRoom.body.data.assets.filter(a=>a.holderId==='p1').every(a=>a.location==='Room 501'));
+ const changedRoom=await api('a','/action',{revision:partialIssued.body.revision,action:'updateRoom',args:['p1','Room 501']});assert.equal(changedRoom.status,200);assert.ok(changedRoom.body.data.assets.filter(a=>a.holderId==='p1').every(a=>a.location==='Room 501'));
  const help=await api('help','/password-help',{personnelNo:'104821',portal:'employee'});assert.equal(help.status,200);const missing=await api('missing','/password-help',{personnelNo:'does-not-exist',portal:'employee'});assert.equal(missing.body.message,help.body.message);
  assert.equal((await api('e','/password-help')).status,403);assert.equal((await api('s','/password-help')).status,403);const pending=(await api('a','/password-help')).body;assert.equal(pending.length,1);
  assert.equal((await api('s',`/password-help/${pending[0].id}/resolve`,{password:'Reset-Employee-2026!'})).status,403);assert.equal((await api('a',`/password-help/${pending[0].id}/resolve`,{password:'Reset-Employee-2026!'})).status,200);assert.equal((await api('e','/register')).status,401);await api('e','/login',{personnelNo:'104821',password:'Reset-Employee-2026!',portal:'employee'});assert.equal((await api('e','/register')).status,200);
  const beforeEdit=(await api('e','/register')).body;const editing=await api('e','/action',{revision:beforeEdit.revision,action:'createSlip',args:[{lines:[{itemId:partialItem.id,qty:2}]}]});assert.equal(editing.status,200);const updated=await api('e','/action',{revision:editing.body.revision,action:'updateSlip',args:[editing.body.result,{lines:[{itemId:partialItem.id,qty:3}],purpose:'Revised requirement'}]});assert.equal(updated.status,200);const directIssue=await api('s','/action',{revision:updated.body.revision,action:'issueSlip',args:[editing.body.result,[{itemId:partialItem.id,qty:1}]]});assert.equal(directIssue.status,200);assert.equal((await api('e','/action',{revision:directIssue.body.revision,action:'updateSlip',args:[editing.body.result,{lines:[{itemId:partialItem.id,qty:1}]}]})).status,400);
  assert.equal((await api('s','/accounts/p1/reset',{useDefault:true})).status,403);assert.equal((await api('a','/accounts/p1/reset',{useDefault:true})).status,200);assert.equal((await api('e','/register')).status,401);assert.equal((await api('e','/login',{personnelNo:'104821',password:'104821',portal:'employee'})).status,200);
  const personState=(await api('a','/register')).body;const createdPerson=await api('a','/action',{revision:personState.revision,action:'addPerson',args:[{personnelNo:'TEST-NEW',name:'New Employee'}]});assert.equal(createdPerson.status,200);assert.equal((await api('new','/login',{personnelNo:'TEST-NEW',password:'TEST-NEW',portal:'employee'})).status,200);
+
+ const action=async(key,name,args)=>{const state=(await api(key,'/register')).body;return api(key,'/action',{revision:state.revision,action:name,args});};
+ assert.equal((await api('s','/health')).body.database,process.env.MYSQL_URL?'mysql':'sqlite');
+ const ac=await action('s','addAsset',[{assetNo:'QA-AC',asr:'QA-ASR',kind:'Air conditioner',make:'QA Brand',model:'Test split AC',acType:'Split',capacity:'1.5',holderId:'p1',location:'QA Room 1',notes:'Integration fixture'}]);assert.equal(ac.status,200);
+ const sofa=await action('s','addAsset',[{assetNo:'QA-SOFA',asr:'QA-FURNITURE',kind:'Sofa',make:'QA Brand',model:'Test sofa',material:'Wood',location:'QA Room 2',notes:'Integration fixture'}]);assert.equal(sofa.status,200);
+ const persisted=(await api('s','/register')).body.data;assert.equal(persisted.assets.find(a=>a.id===ac.body.result).capacity,'1.5');assert.ok(persisted.catalogs.rooms.includes('QA Room 1'));
+ const requested=await action('e','requestAssetChange',[{assetId:ac.body.result,toHolderId:'p2',room:'QA Room 3',reason:'Integration transfer',requestType:'Transfer'}]);assert.equal(requested.status,200);
+ assert.equal((await action('e','prepareAssetRequest',[requested.body.result,{toHolderId:'p2',room:'QA Room 3'}])).status,403);
+ assert.equal((await action('a','approveAssetRequest',[requested.body.result,'Premature'])).status,400);
+ assert.equal((await action('s','prepareAssetRequest',[requested.body.result,{toHolderId:'p2',room:'QA Room 4',storeNote:'Checked'}])).status,200);
+ assert.equal((await action('s','approveAssetRequest',[requested.body.result,'Self approval'])).status,403);
+ const transferred=await action('a','approveAssetRequest',[requested.body.result,'In-charge approved']);assert.equal(transferred.status,200);assert.equal(transferred.body.data.assets.find(a=>a.id===ac.body.result).holderId,'p2');assert.equal(transferred.body.data.assets.find(a=>a.id===ac.body.result).location,'QA Room 4');
+ assert.equal((await action('a','approveAssetRequest',[requested.body.result,'Retry'])).status,400);
+ const returnRequest=await action('s','requestAssetChange',[{assetId:ac.body.result,toHolderId:null,room:'Store',reason:'Return fixture'}]);assert.equal(returnRequest.status,200);
+ assert.equal((await action('a','rejectAssetRequest',[returnRequest.body.result,'Retain for now'])).status,200);
+ const cancelled=await action('s','requestAssetChange',[{assetId:ac.body.result,toHolderId:null,room:'Store',reason:'Cancel fixture'}]);assert.equal(cancelled.status,200);assert.equal((await action('s','cancelAssetRequest',[cancelled.body.result])).status,200);
+ const replacement=await action('s','addAsset',[{assetNo:'QA-CPU-REPLACEMENT',kind:'CPU',make:'QA Brand',model:'Test CPU',asr:'QA-ASR',location:'Store'}]);assert.equal(replacement.status,200);
+ const cpu=(await api('e','/register')).body.data.assets.find(a=>a.kind==='CPU');
+ const change=await action('e','requestAssetChange',[{assetId:cpu.id,toHolderId:'p1',room:'QA Room 5',reason:'Integration replacement',requestType:'Change of asset'}]);assert.equal(change.status,200);
+ assert.equal((await action('s','prepareAssetRequest',[change.body.result,{toHolderId:'p1',room:'QA Room 5',replacementId:replacement.body.result}])).status,200);
+ const replaced=await action('a','approveAssetRequest',[change.body.result,'Checked']);assert.equal(replaced.status,200);assert.equal(replaced.body.data.assets.find(a=>a.id===cpu.id).holderId,null);assert.equal(replaced.body.data.assets.find(a=>a.id===replacement.body.result).holderId,'p1');
+ const directoryRow={personnelNo:'QA-DIRECTORY',sailPersonnelNo:'QA-SAIL',name:'Directory employee',designation:'Manager',section:'Projects',address:'Private residence',mobile:'0000000000'};
+ const directory=await action('a','importEmployeeDirectory',[[directoryRow]]);assert.equal(directory.status,200);assert.deepEqual(directory.body.result,{added:1,updated:0});
+ assert.equal((await api('directory','/login',{personnelNo:'QA-DIRECTORY',password:'QA-DIRECTORY',portal:'employee'})).status,200);
+ const directoryView=(await api('e','/register')).body.data;assert.equal(directoryView.people.length,1);assert.ok(directoryView.assetRecipients.every(p=>p.address===undefined&&p.mobile===undefined));
+ const revision=(await api('s','/register')).body.revision;
+ const simultaneous=await Promise.all([1,2].map(()=>api('s','/action',{revision,action:'receiveStock',args:[partialItem.id,1,'Concurrent test']})));assert.deepEqual(simultaneous.map(r=>r.status).sort(),[200,409]);
+ const afterBackup=await api('s','/backup');assert.equal(afterBackup.status,200);const finalBackup=path.join(dir,'final-backup.db');writeFileSync(finalBackup,Buffer.from(afterBackup.body));const verifyBackup=new Database(finalBackup,{readonly:true});const finalData=JSON.parse(verifyBackup.prepare('SELECT data FROM register').get().data);assert.equal(finalData.assetRequests.find(r=>r.id===change.body.result).status,'approved');assert.ok(finalData.people.some(p=>p.personnelNo==='QA-DIRECTORY'));verifyBackup.close();
+ console.log('PASS: departmental catalogue, asset specifications, saved options, employee directory, transfer preparation/approval, replacement, rejection, cancellation, concurrent revisions and final backup.');
  await api('e','/logout',{});assert.equal((await api('e','/register')).status,401);
+
+ await new Promise(resolve=>{child.once('exit',resolve);child.kill();});
+ const restoreResult=spawnSync(process.execPath,['server/restore.mjs',finalBackup],{cwd:process.cwd(),env:{...process.env,PORT:'4332',MYSQL_TABLE_PREFIX:testPrefix,DB_FILE:path.join(dir,'test.db')},encoding:'utf8',windowsHide:true});
+ assert.equal(restoreResult.status,0,restoreResult.stderr);
+ const {openDatabase}=await import('./database.mjs');const restoredDb=await openDatabase({filename:path.join(dir,'test.db'),tablePrefix:testPrefix});
+ try{const restoredData=JSON.parse((await restoredDb.prepare('SELECT data FROM register WHERE id=1').get()).data);assert.equal(restoredData.assetRequests.find(r=>r.id===change.body.result).status,'approved');assert.equal((await restoredDb.prepare('SELECT count(*) n FROM sessions').get()).n,0);}finally{await restoredDb.close();}
+ console.log('PASS: portable backup restores with allocation history intact and all sessions revoked.');
  console.log('PASS: optional password change, administrator-mediated recovery, reset session revocation, role validation, shared data, request lifecycle, transaction rollback, backup and logout.');
-}finally{if(child.exitCode===null){child.kill();await new Promise(r=>child.once('exit',r));}rmSync(dir,{recursive:true,force:true});}
+}finally{if(child.exitCode===null&&child.signalCode===null){child.kill();await new Promise(r=>child.once('exit',r));}if(testPrefix){const mysql=await import('mysql2/promise');const connection=await mysql.createConnection(process.env.MYSQL_URL);try{for(const table of ['register','accounts','sessions','activity','password_help'])await connection.query('DROP TABLE IF EXISTS `'+testPrefix+table+'`');}finally{await connection.end();}}rmSync(dir,{recursive:true,force:true});}

@@ -42,7 +42,7 @@ function PeoplePage() {
       .filter((p) => (tab === "all" ? true : p.status === tab))
       .filter((p) => {
         if (!query) return true;
-        return `${p.personnelNo} ${p.name} ${p.designation} · Room {p.room || "Not set"} ${p.section}`.toLowerCase().includes(query);
+        return `${p.personnelNo} ${p.sailPersonnelNo || ""} ${p.name} ${p.designation} · Room {p.room || "Not set"} ${p.section}`.toLowerCase().includes(query);
       })
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [people, q, tab]);
@@ -100,7 +100,7 @@ function PeoplePage() {
                       <div>
                         <p className="font-medium">{person.name}</p>
                         <p className="text-sm text-muted-foreground">
-                          {person.personnelNo || "No personnel no."} · {person.designation} · {person.section} · Room {person.room || "Not set"}
+                          RSP {person.personnelNo || "—"} · SAIL {person.sailPersonnelNo || "—"} · {person.designation} · {person.section} · Room {person.room || "Not set"}
                         </p>
                       </div>
                       {person.status === "retired" ? (
@@ -118,6 +118,7 @@ function PeoplePage() {
                             .join(", ")}`
                         : ""}
                     </p>
+                    {(person.mobile || person.email) && <p className="text-sm text-muted-foreground">{person.mobile} {person.email}</p>}
                     <div className="flex gap-2">
                       <Button size="sm" variant="outline" onClick={()=>setReset(person)}>Reset password</Button><Button size="sm" variant="outline" onClick={() => setEditing(person)}>
                         Edit
@@ -162,16 +163,19 @@ function PersonDialog({
   const [designation, setDesignation] = useState("");
   const [section, setSection] = useState("Projects");
   const [room,setRoom]=useState("");
+  const [directory, setDirectory] = useState<Partial<Person>>({});
+  const contactFields = [['sailPersonnelNo','SAIL PL no.'],['mobile','Mobile no.'],['email','Email'],['address','Residential address'],['officeIntercom','I/C (O)'],['residenceIntercom','I/C (R)'],['officeBsnl','BSNL (O)'],['residenceBsnl','BSNL (R)']] as const;
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent
+      <DialogContent className="max-h-[90vh] overflow-y-auto"
         onOpenAutoFocus={() => {
           setPersonnelNo(person?.personnelNo ?? "");
           setName(person?.name ?? "");
           setDesignation(person?.designation ?? "");
           setSection(person?.section ?? "Projects");
           setRoom(person?.room ?? "");
+          setDirectory(Object.fromEntries(contactFields.map(([key])=>[key,person?.[key]||''])));
         }}
       >
         <DialogHeader>
@@ -179,7 +183,7 @@ function PersonDialog({
           <DialogDescription>Used on issue slips and as the holder of assets.</DialogDescription>
         </DialogHeader>
         <div className="grid gap-4">
-          <Field label="Personnel number" htmlFor="pe-no">
+          <Field label="RSP PL number (login)" htmlFor="pe-no">
             <Input
               id="pe-no"
               value={personnelNo}
@@ -193,7 +197,8 @@ function PersonDialog({
           <Field label="Designation" htmlFor="pe-des">
             <CatalogSelect label="Designation" kind="designations" value={designation} onChange={setDesignation}/>
           </Field>
-          <Field label="Room number" htmlFor="pe-room"><Input id="pe-room" value={room} onChange={e=>setRoom(e.target.value)} placeholder="Room 101 / EE cabin"/><p className="mt-1 text-xs text-muted-foreground">All assets held by this person follow this room.</p></Field>
+          <Field label="Room number"><CatalogSelect label="Room no." kind="rooms" value={room} onChange={setRoom}/></Field>
+          {contactFields.map(([key,label])=><Field key={key} label={label}><Input aria-label={label} value={directory[key]||''} onChange={event=>setDirectory(current=>({...current,[key]:event.target.value}))}/></Field>)}
           <Field label="Section" htmlFor="pe-sec">
             <CatalogSelect label="Section" kind="sections" value={section} onChange={setSection}/>
           </Field>
@@ -210,6 +215,7 @@ function PersonDialog({
               }
               if (person) {
                 await updatePerson(person.id, {
+                  ...directory,
                   personnelNo: personnelNo.trim(),
                   name: name.trim(),
                   designation: designation.trim(),
@@ -219,6 +225,7 @@ function PersonDialog({
                 toast.success("Person updated");
               } else {
                 await addPerson({
+                  ...directory,
                   personnelNo: personnelNo.trim(),
                   name: name.trim(),
                   designation: designation.trim() || "Staff",

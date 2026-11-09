@@ -13,6 +13,14 @@ export type AssetEventType =
 export interface Person {
   id: string;
   personnelNo: string;
+  sailPersonnelNo?: string;
+  address?: string;
+  mobile?: string;
+  officeIntercom?: string;
+  residenceIntercom?: string;
+  officeBsnl?: string;
+  residenceBsnl?: string;
+  email?: string;
   name: string;
   designation: string;
   section: string;
@@ -27,6 +35,10 @@ export interface Asset {
   make: string;
   model: string;
   serialNo: string;
+  asr?: string;
+  acType?: string;
+  capacity?: string;
+  material?: string;
   holderId: string | null;
   location: string;
   status: AssetStatus;
@@ -53,6 +65,7 @@ export interface InventoryItem {
   minQty: number;
   icon?: string;
   qty: number;
+  sampleBalance?: boolean;
   reservedQty?: number;
   availableQty?: number;
 }
@@ -95,6 +108,30 @@ export interface Slip {
 export interface Settings {
   officeName: string;
   storekeeper: string;
+  storeInchargeId?: string;
+}
+
+export interface AssetRequest {
+  id: string;
+  assetId: string;
+  assetLabel: string;
+  requesterId: string;
+  requesterName: string;
+  fromHolderId: string | null;
+  fromLocation: string;
+  toHolderId: string | null;
+  toName: string;
+  room: string;
+  requestType: string;
+  reason: string;
+  status: 'requested' | 'pending-approval' | 'approved' | 'rejected' | 'cancelled';
+  createdAt: string;
+  preparedBy?: string;
+  storeNote?: string;
+  replacementId?: string;
+  replacementLabel?: string;
+  reviewNote?: string;
+  reviewedAt?: string;
 }
 
 export interface RegisterData {
@@ -102,6 +139,9 @@ export interface RegisterData {
   assets: Asset[];
   events: AssetEvent[];
   items: InventoryItem[];
+  archivedItems?: InventoryItem[];
+  assetRequests?: AssetRequest[];
+  assetRecipients?: Pick<Person, 'id' | 'name' | 'personnelNo' | 'room'>[];
   moves: StockMove[];
   slips: Slip[];
   settings: Settings;
@@ -115,6 +155,11 @@ export const ASSET_KINDS = [
   "CPU",
   "Laptop",
   "Monitor",
+  "Air conditioner",
+  "Sofa",
+  "Chair",
+  "Table",
+  "Cupboard",
   "Printer",
   "UPS",
   "Scanner",

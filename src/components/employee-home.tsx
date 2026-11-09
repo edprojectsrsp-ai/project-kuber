@@ -1,3 +1,4 @@
+import { useSession } from '@/lib/session';
 import { useState } from "react";
 import { useRegister } from "@/lib/store/use-register";
 import { PageHeader } from "./page-header";
@@ -7,8 +8,9 @@ import { AssetStatusBadge } from "./status-badge";
 import { ItemIcon } from "./catalog-controls";
 export function MyAssets({ compact = false }: { compact?: boolean }) {
   const assets = useRegister((s) => s.assets);
+  const user = useSession(s=>s.user)!;
   const [q, setQ] = useState("");
-  const filtered = assets.filter((a) =>
+  const filtered = assets.filter(a=>a.holderId===user.personId).filter((a) =>
     [a.kind, a.assetNo, a.make, a.model, a.location, a.serialNo]
       .join(" ")
       .toLowerCase()
@@ -20,7 +22,7 @@ export function MyAssets({ compact = false }: { compact?: boolean }) {
         <PageHeader
           eyebrow="My register"
           title="My assets"
-          description="The machines allocated to you. All assigned assets follow your room. Contact the storekeeper to correct a room or asset number."
+          description="Your allocated assets and rooms. Use Contact store / Request asset change below for transfers, replacements or room changes."
         />
       )}
       {compact && <h2 className="text-lg font-semibold">My assets</h2>}
@@ -46,8 +48,11 @@ export function MyAssets({ compact = false }: { compact?: boolean }) {
                 {a.make} {a.model}
               </p>
               <p className="text-sm text-muted-foreground">
-                Room {a.location || "—"} · Serial {a.serialNo || "—"}
+                ASR {a.asr || "—"} · Room {a.location || "—"} · ID {a.assetNo}
               </p>
+              {a.acType && <p className="text-sm">{a.acType} · {a.capacity} tonnes</p>}
+              {a.material && <p className="text-sm">Material {a.material}</p>}
+              {a.notes && <p className="text-sm text-muted-foreground">{a.notes}</p>}
               <AssetStatusBadge status={a.status} />
             </CardContent>
           </Card>
