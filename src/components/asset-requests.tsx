@@ -85,14 +85,14 @@ export function AssetRequests() {
           <option value="store">Store (unassigned)</option>{people.map(person => <option key={person.id} value={person.id}>{person.name} · {person.personnelNo}</option>)}
         </select></Field>
         <Field label="Room no."><CatalogSelect label="Room no." kind="rooms" value={room} onChange={setRoom} allowCreate={store}/></Field>
-        {editing && requestType === 'Change of asset' && <Field label="Replacement asset"><select aria-label="Replacement asset" className="h-10 w-full rounded-lg border bg-background px-3" value={replacementId} onChange={event => setReplacementId(event.target.value)}>
+        {store && requestType === 'Change of asset' && <Field label="Replacement asset"><select aria-label="Replacement asset" className="h-10 w-full rounded-lg border bg-background px-3" value={replacementId} onChange={event => setReplacementId(event.target.value)}>
           <option value="">Select available replacement</option>{assets.filter(a => !a.holderId && a.kind === selectedAsset?.kind && a.id !== selectedAsset?.id).map(a => <option key={a.id} value={a.id}>{a.assetNo} · {a.make} · {a.model}</option>)}
         </select></Field>}
         <Field label={editing ? 'Store remarks' : 'Remarks / reason'}><Textarea aria-label="Asset change remarks" value={remarks} onChange={event => setRemarks(event.target.value)}/></Field>
       </div>
-      <DialogFooter><Button variant="outline" onClick={() => setOpen(false)}>Close</Button><Button disabled={busy || !assetId || !room || (!editing && !remarks.trim())} onClick={() => perform(async () => {
+      <DialogFooter><Button variant="outline" onClick={() => setOpen(false)}>Close</Button><Button disabled={busy || !assetId || !room || (!editing && !remarks.trim()) || (store && requestType === 'Change of asset' && !replacementId)} onClick={() => perform(async () => {
         if(editing) await register.prepareAssetRequest(editing.id,{toHolderId:to==='store'?null:to,room,storeNote:remarks,replacementId});
-        else await register.requestAssetChange({assetId,toHolderId:to==='store'?null:to,room,requestType,reason:remarks});
+        else {const id=await register.requestAssetChange({assetId,toHolderId:to==='store'?null:to,room,requestType,reason:remarks});if(store&&requestType==='Change of asset')await register.prepareAssetRequest(id,{toHolderId:to==='store'?null:to,room,storeNote:'',replacementId});}
       }, editing || store ? 'Submitted for in-charge approval' : 'Request sent to store')}>{editing || store ? 'Submit for approval' : 'Send to store'}</Button></DialogFooter>
     </DialogContent></Dialog>
     <Dialog open={!!review} onOpenChange={value => !value && setReview(null)}><DialogContent>

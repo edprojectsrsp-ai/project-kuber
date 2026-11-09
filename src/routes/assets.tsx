@@ -416,7 +416,7 @@ function TransferDialog({ asset, onClose }: { asset: Asset | null; onClose: () =
   const [to, setTo] = useState("store");
   const [note, setNote] = useState("");
   const [location, setLocation] = useState("");
-  const updateAsset = useRegister((s) => s.updateAsset);
+  const [busy, setBusy] = useState(false);
 
   return (
     <Dialog open={Boolean(asset)} onOpenChange={(v) => !v && onClose()}>
@@ -466,13 +466,17 @@ function TransferDialog({ asset, onClose }: { asset: Asset | null; onClose: () =
           <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          <Button
+          <Button disabled={busy}
             onClick={async () => {
               if (!asset) return;
-              const next = to === "store" ? null : to;
-              await transferAsset(asset.id, next, note.trim(), location.trim());
-              toast.success(`${asset.assetNo} submitted for in-charge approval`);
-              onClose();
+              if (!location.trim()) { toast.error("Select a room number."); return; }
+              setBusy(true);
+              try {
+                const next = to === "store" ? null : to;
+                await transferAsset(asset.id, next, note.trim(), location.trim());
+                toast.success(`${asset.assetNo} submitted for in-charge approval`);
+                onClose();
+              } catch(error) { toast.error((error as Error).message); } finally { setBusy(false); }
             }}
           >
             Submit for approval
