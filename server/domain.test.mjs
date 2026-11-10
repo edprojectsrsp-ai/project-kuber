@@ -5,6 +5,33 @@ import { applyAction,visibleData } from './domain.mjs';
 const store={personId:'p5',name:'Storekeeper',role:'store'},employee={personId:'p1',name:'Employee',role:'employee'};
 const admin={...store,role:'admin'};
 const run=(d,a,args,u=store)=>applyAction(d,u,a,args);
+
+test('editing stock cannot create duplicate identities or partially mutate a rejected item',()=>{
+ const d=sampleRegister();
+ const first=run(d,'addItem',[{name:'Duplicate check paper',make:'Brand',unit:'ream',qty:0}]);
+ const second=run(d,'addItem',[{name:'Other check paper',make:'Brand',unit:'ream',qty:0}]);
+ const original=structuredClone(d.items.find(i=>i.id===second));
+ assert.throws(()=>run(d,'updateItem',[second,{name:'  DUPLICATE   CHECK PAPER ',make:'brand',unit:'REAM'}]),/already exist/);
+ assert.deepEqual(d.items.find(i=>i.id===second),original);
+ run(d,'updateItem',[first,{name:'Duplicate check paper',icon:'paper'}]);
+ assert.equal(d.items.find(i=>i.id===first).icon,'paper');
+});
+
+test('catalogue additions reuse the canonical case of existing and built-in options',()=>{
+ const d=sampleRegister();
+ assert.equal(run(d,'addCatalogOption',['makes','hp']),'HP');
+ assert.equal(run(d,'addCatalogOption',['acTypes','split']),'Split');
+ run(d,'addCatalogOption',['materials','Fabric']);
+ assert.equal(run(d,'addCatalogOption',['materials','fabric']),'Fabric');
+ assert.deepEqual(d.catalogs.materials,['Fabric']);
+});
+
+test('a stock receipt cannot overflow a safe whole-number balance',()=>{
+ const d=sampleRegister(),i=d.items[0];i.qty=Number.MAX_SAFE_INTEGER;
+ const moves=d.moves.length;
+ assert.throws(()=>run(d,'receiveStock',[i.id,1,'Overflow']),/whole number/);
+ assert.equal(i.qty,Number.MAX_SAFE_INTEGER);assert.equal(d.moves.length,moves);
+});
 test('direct issue, recipient receipt and retry protection',()=>{const d=sampleRegister(),i=d.items[0],before=i.qty;const request=run(d,'createSlip',[{personId:'p2',lines:[{itemId:i.id,qty:1}],purpose:'Test'}],employee);const s=d.slips.find(s=>s.id===request);assert.equal(s.personId,'p1');assert.throws(()=>run(d,'approveSlip',[request],employee),/storekeeper/);run(d,'issueSlip',[request]);assert.equal(i.qty,before-1);assert.throws(()=>run(d,'issueSlip',[request]));assert.throws(()=>run(d,'confirmSlip',[request]),/requesting employee/);run(d,'confirmSlip',[request],employee);assert.equal(s.status,'closed');assert.equal(i.qty,before-1);});
 test('duplicate request lines aggregate before availability check',()=>{const d=sampleRegister(),i=d.items[0];i.qty=5;const request=run(d,'createSlip',[{personId:'p1',lines:[{itemId:i.id,qty:4},{itemId:i.id,qty:4}]}]);assert.throws(()=>run(d,'approveSlip',[request]),/Not enough/);assert.equal(i.qty,5);});
 test('invalid quantities and direct balance editing are rejected',()=>{const d=sampleRegister(),i=d.items[0];for(const q of [-1,0,1.5,Infinity,NaN])assert.throws(()=>run(d,'receiveStock',[i.id,q,'Test']));assert.throws(()=>run(d,'updateItem',[i.id,{qty:999}]));});

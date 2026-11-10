@@ -1,3 +1,4 @@
+import { isActiveAsset } from '@/lib/store/asset-status';
 import { AssetRequests } from '@/components/asset-requests';
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
@@ -28,7 +29,7 @@ function Dashboard() {
     awaiting = slips.filter((s) => s.status === "issued").length,
     low = items.filter((i) => (i.availableQty ?? i.qty) < 10),
     unallocated = assets.filter(
-      (a) => !a.holderId && a.status !== "condemned",
+      (a) => !a.holderId && isActiveAsset(a),
     ).length;
   const recent = [...slips]
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
@@ -205,7 +206,7 @@ function Dashboard() {
                 className="flex items-center gap-3 rounded-xl bg-muted/50 p-3"
               >
                 <span className="rounded-xl bg-card p-3 text-primary">
-                  <ItemIcon name={i.name} icon={i.icon} />
+                  <ItemIcon name={i.name} icon={i.icon} badge className="size-9" />
                 </span>
                 <div className="flex-1">
                   <p className="text-sm font-medium">{i.name}</p>

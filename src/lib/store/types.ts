@@ -1,5 +1,5 @@
 export type PersonStatus = "active" | "retired";
-export type AssetStatus = "in-use" | "in-store" | "unallocated" | "condemned";
+export type AssetStatus = "in-use" | "in-store" | "unallocated" | "condemned" | "deactivated";
 export type SlipStatus = "open" | "approved" | "issued" | "closed" | "cancelled";
 export type AssetEventType =
   | "created"
@@ -8,6 +8,8 @@ export type AssetEventType =
   | "swapped"
   | "returned"
   | "updated"
+  | "deactivated"
+  | "reactivated"
   | "condemned";
 
 export interface Person {
@@ -44,6 +46,9 @@ export interface Asset {
   status: AssetStatus;
   notes: string;
   updatedAt: string;
+  deactivatedAt?: string;
+  deactivationReason?: string;
+  deactivatedBy?: string;
 }
 
 export interface AssetEvent {
@@ -132,6 +137,7 @@ export interface AssetRequest {
   replacementLabel?: string;
   reviewNote?: string;
   reviewedAt?: string;
+  resolutionNote?: string;
 }
 
 export interface RegisterData {

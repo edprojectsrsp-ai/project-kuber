@@ -5,6 +5,7 @@ type PersonDraft=Omit<Person,'id'>;type AssetDraft=Omit<Asset,'id'|'updatedAt'>;
 export type IssueResult={ok:true}|{ok:false;message:string};
 interface RegisterState extends RegisterData {
  revision:number;syncError:string|null;
+ deactivateAsset:(id:string,reason:string)=>Promise<void>;reactivateAsset:(id:string,reason:string)=>Promise<void>;
  requestAssetChange:(draft:{assetId:string;toHolderId:string|null;room:string;requestType:string;reason:string})=>Promise<string>;
  prepareAssetRequest:(id:string,draft:{toHolderId:string|null;room:string;storeNote:string;replacementId?:string})=>Promise<void>;
  approveAssetRequest:(id:string,note:string)=>Promise<void>;rejectAssetRequest:(id:string,note:string)=>Promise<void>;cancelAssetRequest:(id:string)=>Promise<void>;
@@ -32,6 +33,7 @@ async function perform(action:string,args:unknown[]){
 function mutate(action:string,args:unknown[]):Promise<any>{const next=queue.then(()=>perform(action,args));queue=next.catch(()=>{});return next;}
 export const useRegister=create<RegisterState>(()=>({
  ...empty,revision:0,syncError:null,
+ deactivateAsset:(...args)=>mutate('deactivateAsset',args),reactivateAsset:(...args)=>mutate('reactivateAsset',args),
  requestAssetChange:(...args)=>mutate('requestAssetChange',args),prepareAssetRequest:(...args)=>mutate('prepareAssetRequest',args),
  approveAssetRequest:(...args)=>mutate('approveAssetRequest',args),rejectAssetRequest:(...args)=>mutate('rejectAssetRequest',args),cancelAssetRequest:(...args)=>mutate('cancelAssetRequest',args),
  addPerson:(...args)=>mutate('addPerson',args),updatePerson:(...args)=>mutate('updatePerson',args),retirePerson:(...args)=>mutate('retirePerson',args),

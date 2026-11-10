@@ -17,5 +17,6 @@ export function AssetStatusBadge({ status }: { status: AssetStatus }) {
   if (status === "unallocated") return <Badge variant="open">Unallocated · verify</Badge>;
   if (status === "in-store") return <Badge variant="store">In store</Badge>;
   if (status === "condemned") return <Badge variant="danger">Condemned</Badge>;
+  if (status === "deactivated") return <Badge variant="outline">Deactivated</Badge>;
   return <Badge variant="closed">In use</Badge>;
 }

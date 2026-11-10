@@ -118,7 +118,7 @@ function IssueForm({
           <div key={line.itemId} className="approval-item">
             <div className="flex items-center gap-3">
               <span className="rounded-xl bg-accent p-3 text-primary">
-                <ItemIcon name={item?.name} icon={item?.icon} />
+                <ItemIcon name={item?.name} icon={item?.icon} badge className="size-9" />
               </span>
               <div className="flex-1">
                 <p className="font-semibold">

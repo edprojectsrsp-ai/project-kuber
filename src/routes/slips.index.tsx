@@ -155,7 +155,7 @@ function SlipsPage() {
                         </td>
                         <td className="p-4">
                           <div className="flex items-center gap-2">
-                            <ItemIcon name={i?.name} icon={i?.icon} />
+                            <ItemIcon name={i?.name} icon={i?.icon} badge className="size-9" />
                             <span>
                               {i?.name}
                               <small className="block text-muted-foreground">

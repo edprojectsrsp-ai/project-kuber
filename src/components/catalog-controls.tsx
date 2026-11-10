@@ -1,114 +1,11 @@
 import { useId, useState } from "react";
 import { toast } from "sonner";
-import {
-  Minus,
-  Plus,
-  Package,
-  FileText,
-  PenTool,
-  Mouse,
-  Keyboard,
-  Cable,
-  Plug,
-  Droplets,
-  Lightbulb,
-  Wrench,
-  Folder,
-  Scissors,
-  Notebook,
-  Paperclip,
-  Brush,
-  Shield,
-  HardDrive,
-  Cpu,
-  Monitor,
-  Printer,
-  Laptop,
-  Battery,
-  Scan,
-  Projector,
-  Network,
-} from "lucide-react";
+import { Minus, Plus } from "lucide-react";
 import { useRegister } from "@/lib/store/use-register";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
+export { ItemIcon, ITEM_ICONS, ICON_STYLES } from "./item-icon";
 
-export const ITEM_ICONS = {
-  package: Package,
-  paper: FileText,
-  pen: PenTool,
-  mouse: Mouse,
-  keyboard: Keyboard,
-  cable: Cable,
-  plug: Plug,
-  liquid: Droplets,
-  bulb: Lightbulb,
-  tools: Wrench,
-  folder: Folder,
-  scissors: Scissors,
-  notebook: Notebook,
-  clip: Paperclip,
-  cleaning: Brush,
-  safety: Shield,
-  drive: HardDrive,
-  cpu: Cpu,
-  monitor: Monitor,
-  printer: Printer,
-  laptop: Laptop,
-  battery: Battery,
-  scanner: Scan,
-  projector: Projector,
-  network: Network,
-};
-export function ItemIcon({
-  name = "",
-  icon = "auto",
-  className = "size-5",
-}: {
-  name?: string;
-  icon?: string;
-  className?: string;
-}) {
-  const n = name.toLowerCase();
-  const key =
-    icon !== "auto"
-      ? icon
-      : /cpu|desktop/.test(n)
-        ? "cpu"
-        : /monitor|screen/.test(n)
-          ? "monitor"
-          : /printer|toner|cartridge/.test(n)
-            ? "printer"
-            : /laptop/.test(n)
-              ? "laptop"
-              : /ups|battery/.test(n)
-                ? "battery"
-                : /scanner/.test(n)
-                  ? "scanner"
-                  : /projector/.test(n)
-                    ? "projector"
-                    : /switch|router|network/.test(n)
-                      ? "network"
-                      : /paper|a4|ream/.test(n)
-                        ? "paper"
-                        : /pencil|pen\b|marker/.test(n)
-                          ? "pen"
-                          : /mouse/.test(n)
-                            ? "mouse"
-                            : /keyboard/.test(n)
-                              ? "keyboard"
-                              : /cable|wire/.test(n)
-                                ? "cable"
-                                : /bulb|light/.test(n)
-                                  ? "bulb"
-                                  : /file|folder/.test(n)
-                                    ? "folder"
-                                    : /soap|clean|brush/.test(n)
-                                      ? "cleaning"
-                                      : "package";
-  const Icon = ITEM_ICONS[key as keyof typeof ITEM_ICONS] || Package;
-  return <Icon className={className} />;
-}
 export function QuantityControl({
   value,
   onChange,

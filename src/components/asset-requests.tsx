@@ -1,3 +1,4 @@
+import { isActiveAsset } from '@/lib/store/asset-status';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { useSession } from '@/lib/session';
@@ -29,7 +30,7 @@ export function AssetRequests() {
   const [review, setReview] = useState<AssetRequest | null>(null);
   const [reviewNote, setReviewNote] = useState('');
   const [busy, setBusy] = useState(false);
-  const assets = register.assets.filter(a => a.status !== 'condemned');
+  const assets = register.assets.filter(a => isActiveAsset(a));
   const selectedAsset = register.assets.find(a => a.id === (editing?.assetId || assetId));
   const pending = requests.filter(r => ['requested', 'pending-approval'].includes(r.status));
 
@@ -60,6 +61,7 @@ export function AssetRequests() {
         <p className="text-sm">{request.reason}</p>
         {request.replacementLabel && <p className="text-sm">Replacement {request.replacementLabel}</p>}
         {request.storeNote && <p className="text-sm text-muted-foreground">Store remarks · {request.storeNote}</p>}
+        {request.resolutionNote && <p className="text-sm text-muted-foreground">{request.resolutionNote}</p>}
         {request.reviewNote && <p className="text-sm text-muted-foreground">Review remarks · {request.reviewNote}</p>}
         <p className="text-xs text-muted-foreground">{formatDateTime(request.createdAt)}</p>
         <div className="flex flex-wrap gap-2">

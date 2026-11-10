@@ -13,6 +13,7 @@ import {
   ItemNameInput,
   ItemIcon,
   ITEM_ICONS,
+  ICON_STYLES,
   QuantityControl,
 } from "@/components/catalog-controls";
 import { RequestDialog } from "@/components/request-dialog";
@@ -37,10 +38,10 @@ export const Route = createFileRoute("/stock")({
 });
 export function stockTone(q: number) {
   return q < 5
-    ? "bg-red-50 text-red-700 border-red-200 dark:bg-red-950/40 dark:text-red-300 dark:border-red-900"
+    ? "bg-red-50 text-red-700 border-red-200"
     : q < 10
-      ? "bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/40 dark:text-orange-300 dark:border-orange-900"
-      : "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-900";
+      ? "bg-orange-50 text-orange-700 border-orange-200"
+      : "bg-emerald-50 text-emerald-700 border-emerald-200";
 }
 function StockPage() {
   const user = useSession((s) => s.user)!;
@@ -141,6 +142,7 @@ function StockPage() {
       <p className="text-xs text-muted-foreground">
         {filtered.length} of {items.length} items
       </p>
+      {!filtered.length && <p role="status" className="rounded-xl border bg-card p-6 text-sm text-muted-foreground">No materials match this search and stock filter.</p>}
       <div
         className={
           view === "grid"
@@ -154,21 +156,19 @@ function StockPage() {
             <article
               key={i.id}
               className={
-                "rounded-2xl border bg-card p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md " +
+                "min-w-0 rounded-2xl border bg-card p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md " +
                 (view === "list" ? "flex flex-wrap items-center gap-4" : "")
               }
             >
               <div
                 className={
-                  "flex items-start gap-3 " +
+                  "flex min-w-0 items-start gap-3 " +
                   (view === "list" ? "min-w-52 flex-1" : "")
                 }
               >
-                <span className={"rounded-2xl border p-3 " + stockTone(n)}>
-                  <ItemIcon name={i.name} icon={i.icon} className="size-6" />
-                </span>
+                <ItemIcon name={i.name} icon={i.icon} badge className={view === "grid" ? "size-12" : "size-10"} />
                 <div className="min-w-0">
-                  <h2 className="font-semibold">{i.name}</h2>
+                  <h2 className="item-description font-semibold">{i.name}</h2>
                   <p className="mt-1 text-sm text-muted-foreground">
                     {i.make || "Generic"} · {i.category}
                   </p>
@@ -372,7 +372,7 @@ function ItemForm({
         )}
       </div>
       <Field label="Item icon">
-        <div className="grid grid-cols-7 gap-2">
+        <div className="grid grid-cols-5 gap-2 sm:grid-cols-8">
           <Button
             type="button"
             size="icon"
@@ -381,20 +381,20 @@ function ItemForm({
             aria-pressed={draft.icon === "auto"}
             onClick={() => set("icon", "auto")}
           >
-            <ItemIcon name={draft.name} />
+            <ItemIcon name={draft.name} badge className="size-8" />
           </Button>
-          {Object.entries(ITEM_ICONS).map(([key, Icon]) => (
+          {(Object.keys(ITEM_ICONS) as (keyof typeof ITEM_ICONS)[]).map((key) => (
             <Button
               key={key}
-              title={key}
-              aria-label={key + " icon"}
+              title={ICON_STYLES[key].label}
+              aria-label={ICON_STYLES[key].label + " icon"}
               aria-pressed={draft.icon === key}
               type="button"
               size="icon"
               variant={draft.icon === key ? "secondary" : "outline"}
               onClick={() => set("icon", key)}
             >
-              <Icon className="size-4" />
+              <ItemIcon icon={key} badge className="size-8" />
             </Button>
           ))}
         </div>

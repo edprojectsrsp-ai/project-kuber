@@ -11,7 +11,7 @@ export function MyAssets({ compact = false }: { compact?: boolean }) {
   const user = useSession(s=>s.user)!;
   const [q, setQ] = useState("");
   const filtered = assets.filter(a=>a.holderId===user.personId).filter((a) =>
-    [a.kind, a.assetNo, a.make, a.model, a.location, a.serialNo]
+    [a.kind, a.assetNo, a.asr, a.make, a.model, a.location, a.serialNo, a.acType, a.capacity, a.material, a.notes]
       .join(" ")
       .toLowerCase()
       .includes(q.toLowerCase()),
@@ -30,7 +30,7 @@ export function MyAssets({ compact = false }: { compact?: boolean }) {
         <SearchField
           value={q}
           onChange={setQ}
-          placeholder="Search type, asset number, make, model, room or serial…"
+          placeholder="Search ASR, ID, description, make, room or specifications…"
         />
       )}
       <div className="grid gap-3 sm:grid-cols-2">
@@ -38,13 +38,11 @@ export function MyAssets({ compact = false }: { compact?: boolean }) {
           <Card key={a.id}>
             <CardContent className="space-y-2 p-5">
               <div className="mb-3 flex items-center gap-3">
-                <span className="rounded-xl bg-accent p-3 text-primary">
-                  <ItemIcon name={a.kind} className="size-6" />
-                </span>
+                <ItemIcon name={a.kind} badge className="size-12" />
                 <span className="text-sm text-muted-foreground">{a.kind}</span>
               </div>
-              <p className="text-lg font-semibold">{a.assetNo}</p>
-              <p className="text-sm">
+              <p className="item-description text-lg font-semibold">{a.assetNo}</p>
+              <p className="item-description text-sm">
                 {a.make} {a.model}
               </p>
               <p className="text-sm text-muted-foreground">

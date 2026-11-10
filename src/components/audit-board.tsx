@@ -1,3 +1,4 @@
+import { isActiveAsset } from '@/lib/store/asset-status';
 import { useSession } from '@/lib/session';
 import { ItemIcon } from './catalog-controls';
 import { askText } from "@/components/text-prompt";
@@ -22,7 +23,7 @@ import type { Asset } from "@/lib/store/types";
 const AUDIT_KINDS = ["CPU", "Monitor", "Printer"] as const;
 
 function heldOf(assets: Asset[], personId: string, kind: string) {
-  return assets.find((a) => a.holderId === personId && a.kind === kind && a.status !== "condemned");
+  return assets.find((a) => a.holderId === personId && a.kind === kind && isActiveAsset(a));
 }
 
 export function AuditBoard() {
@@ -47,14 +48,14 @@ export function AuditBoard() {
   );
 
   const spare = assets
-    .filter((a) => !a.holderId && a.status !== "condemned" && AUDIT_KINDS.includes(a.kind as (typeof AUDIT_KINDS)[number]))
+    .filter((a) => !a.holderId && isActiveAsset(a) && AUDIT_KINDS.includes(a.kind as (typeof AUDIT_KINDS)[number]))
     .slice()
     .sort((a, b) => a.assetNo.localeCompare(b.assetNo));
 
   return (
     <div className="space-y-4">
       <Card><CardContent className="flex flex-wrap items-center justify-between gap-3 p-4"><div><p className="font-medium">{audit?.status === "open" ? "Audit in progress" : "Physical asset audit"}</p><p className="text-xs text-muted-foreground">{audit?.status === "open" ? `${Object.keys(audit.results).length} / ${audit.baseline.length} recorded` : "Keep a dated record of verified machines and discrepancies."}</p></div>{audit?.status === "open" ? <Button variant="outline" onClick={async()=>{const note=await askText("Exception note (required if any assets remain unchecked):", "");if(note!==null){await finishAudit(note);toast.success("Audit finished");}}}>Finish audit</Button> : <Button onClick={async()=>{await startAudit();toast.success("Audit started");}}>Start audit</Button>}</CardContent></Card>
-      {audit?.status === "open" && <div className="rounded-xl border border-border bg-card p-4"><p className="mb-3 text-sm font-medium">Verify physical presence</p><div className="max-h-64 space-y-2 overflow-auto">{audit.baseline.map(a=><div key={a.id} className="flex flex-wrap items-center justify-between gap-2 text-sm"><span>{a.assetNo} · {a.kind} <span className="text-muted-foreground">{audit.results[a.id] || "Unchecked"}</span></span><span className="flex gap-2"><Button size="sm" variant="outline" onClick={()=>markAudit(a.id,"verified")}>Verified</Button><Button size="sm" variant="ghost" onClick={()=>markAudit(a.id,"missing")}>Missing</Button></span></div>)}</div></div>}
+      {audit?.status === "open" && <div className="rounded-xl border border-border bg-card p-4"><p className="mb-3 text-sm font-medium">Verify physical presence</p><div className="max-h-64 space-y-2 overflow-auto">{audit.baseline.filter(a=>assets.some(current=>current.id===a.id&&isActiveAsset(current))).map(a=><div key={a.id} className="flex flex-wrap items-center justify-between gap-2 text-sm"><span>{a.assetNo} · {a.kind} <span className="text-muted-foreground">{audit.results[a.id] || "Unchecked"}</span></span><span className="flex gap-2"><Button size="sm" variant="outline" onClick={()=>markAudit(a.id,"verified")}>Verified</Button><Button size="sm" variant="ghost" onClick={()=>markAudit(a.id,"missing")}>Missing</Button></span></div>)}</div></div>}
       <p className="max-w-2xl text-sm text-muted-foreground">
         One CPU, one monitor and one printer per person. Change a slot and the previous person
         goes blank for that machine. If the new person already has one, their old one becomes
@@ -67,7 +68,7 @@ export function AuditBoard() {
             <Card>
               <CardContent className="grid gap-3 p-4">
                 <div>
-                  <div className="flex flex-wrap items-center justify-between gap-2"><p className="font-medium">{person.name}</p><button disabled={!canReconcile} className="room-chip" onClick={async()=>{const room=await askText(`Room for ${person.name}`,person.room||"");if(room!==null){await updateRoom(person.id,room);toast.success("Room updated for all assigned assets");}}}>Room {person.room||"Not set"} · Edit</button></div>
+                  <div className="flex flex-wrap items-center justify-between gap-2"><p className="font-medium">{person.name}</p><button disabled={!canReconcile} className="room-chip" onClick={async()=>{const room=await askText(`Room for ${person.name}`,person.room||"");if(room!==null){await updateRoom(person.id,room);toast.success("Default room and matching asset locations updated");}}}>Room {person.room||"Not set"} · Edit</button></div>
                   <p className="text-sm text-muted-foreground">
                     {person.personnelNo || "No personnel no."} · {person.designation}
                   </p>
@@ -145,7 +146,7 @@ function consequences(assets: Asset[], asset: Asset, toHolderId: string | null, 
     if (toHolderId) {
       lines.push(`${asset.assetNo} will show on ${name(toHolderId)}.`);
       const displaced = assets.find(
-        (a) => a.id !== asset.id && a.kind === asset.kind && a.holderId === toHolderId && a.status !== "condemned",
+        (a) => a.id !== asset.id && a.kind === asset.kind && a.holderId === toHolderId && isActiveAsset(a),
       );
       if (displaced) {
         lines.push(`${name(toHolderId)}’s current ${displaced.assetNo} will become unallocated.`);
@@ -175,7 +176,7 @@ function SlotDialog({
   const person = people.find((p) => p.id === slot?.personId);
   const current = slot ? heldOf(assets, slot.personId, slot.kind) : undefined;
   const options = assets
-    .filter((a) => slot && a.kind === slot.kind && a.status !== "condemned")
+    .filter((a) => slot && a.kind === slot.kind && isActiveAsset(a))
     .slice()
     .sort((a, b) => a.assetNo.localeCompare(b.assetNo));
 

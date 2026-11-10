@@ -41,6 +41,10 @@ The current local background server can be stopped with `stop-local.ps1` and res
 
 ## Asset records and change requests
 
+The Assets page contains Audit, All assets, Unallocated and Deactivated tabs. Storekeepers can deactivate an asset with a mandatory reason. Its active allocation is cleared, history and location are retained, source change requests are cancelled, and a proposed replacement that becomes inactive is returned to store preparation. Reactivating returns the asset to Unallocated. Inactive assets cannot be transferred, selected as replacements or included in a new physical audit.
+
+Material and asset icons use coloured circular badges with specific symbols for the departmental catalogue, cooling equipment and furniture. Saved icon overrides remain available in the item editor.
+
 Assets record ASR, ID, description, make, room and remarks. Air conditioners also record Split/Window/Tower type and capacity in tonnes. Furniture records material, initially Wood/Steel. Types, makes, ASRs, IDs, rooms, capacities and materials use saved options with inline creation. Description and remarks are free text.
 
 Employees use Contact store / Request asset change for transfers, replacements, room changes and returns. The store prepares the recipient, room and optional available replacement. A separate store in-charge approves or rejects the proposal. Approval updates allocations and history together. The requester and preparer cannot approve their own proposal. Administrators nominate an in-charge in Profile & settings; otherwise an administrator reviews. Administrator audit reconciliation and retirement handovers remain available for maintenance.

@@ -1,3 +1,11 @@
+# Verification - 10 November 2026
+
+Added specific circular icon badges for all 70 departmental consumables, computer equipment, ACs and furniture, with saved icon overrides. Fixed long-description wrapping, stock badge contrast under a system dark preference, case-insensitive catalogue option reuse, duplicate inventory edits and unsafe stock balance overflow.
+
+Assets now has Audit, All assets, Unallocated and Deactivated tabs. Store deactivation requires a reason, clears active custody, retains history, cancels pending source changes and returns inactive replacement proposals to store preparation. Reactivation returns to Unallocated. Inactive assets cannot be allocated or verified in an active audit.
+
+Passed 33 tests, expanded HTTP workflows, portable backup/restore and the production build. Browser checks created the new catalogue badges, deactivated an isolated chair as storekeeper, verified its tab and counts, reactivated it into Unallocated and verified both history entries. Tests used an isolated local register.
+
 # Verification - 9 November 2026
 
 Departmental catalogue replacement, ASR/AC/furniture fields, reusable options, independent asset approval, employee directory import and MySQL persistence are implemented. Local checks passed 24 domain tests, expanded HTTP workflows, portable backup/restore with session revocation, concurrent revision rejection and the production build. Browser verification created an AC using saved options, submitted its allocation as storekeeper and approved it using a separate administrator. Earlier verification notes below describe previous releases.

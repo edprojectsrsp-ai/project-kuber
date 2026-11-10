@@ -109,7 +109,7 @@ function RequestForm({ slip, onClose }: { slip?: Slip; onClose: () => void }) {
               setQ("");
             }}
           >
-            <ItemIcon name={i.name} icon={i.icon} />
+            <ItemIcon name={i.name} icon={i.icon} badge className="size-9" />
             <span className="flex-1 text-sm">
               {i.name}
               <small className="block text-muted-foreground">

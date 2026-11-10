@@ -1,3 +1,5 @@
+import { isActiveAsset } from '@/lib/store/asset-status';
+import { AssetLifecycleDialog } from '@/components/asset-lifecycle-dialog';
 import { AssetRequests } from '@/components/asset-requests';
 import { ItemIcon,CatalogSelect } from '@/components/catalog-controls';
 import { useSession } from "@/lib/session";
@@ -31,31 +33,38 @@ import { formatDate, formatDateTime } from "@/lib/format";
 import { personName, useRegister } from "@/lib/store/use-register";
 import { ASSET_KINDS, type Asset } from "@/lib/store/types";
 
-export const Route = createFileRoute("/assets")({ validateSearch:(s:Record<string,unknown>):{view?:string}=>({view:s.view==="store"?"store":undefined}), component: AssetsPage });
+export const Route = createFileRoute("/assets")({ validateSearch:(s:Record<string,unknown>):{view?:string}=>({view:["store","unallocated","deactivated","audit"].includes(String(s.view))?String(s.view):undefined}), component: AssetsPage });
+
+type AssetView = "audit" | "register" | "unallocated" | "deactivated";
 
 function AssetsPage() {
   const assets = useRegister((s) => s.assets);
   const kinds=useRegister(s=>s.catalogs?.assetKinds||[...ASSET_KINDS]);
   const people = useRegister((s) => s.people);
   const {view}=Route.useSearch();
-  useEffect(()=>{setHolder(view==="store"?"store":"all");if(view==="store")setMode("register");},[view]);
+  const navigate=Route.useNavigate();
+  useEffect(()=>{setHolder("all");setMode(view==="store"||view==="unallocated"?"unallocated":view==="deactivated"?"deactivated":view==="audit"?"audit":"register");},[view]);
   const [q, setQ] = useState("");
   const [kind, setKind] = useState("all");
   const [holder, setHolder] = useState("all");
-  const [mode, setMode] = useState<"audit" | "register">("register");
+  const [mode, setMode] = useState<AssetView>("register");
   const [editing, setEditing] = useState<Asset | null | "new">(null);
   const [transfer, setTransfer] = useState<Asset | null>(null);
   const [swapA, setSwapA] = useState<string>("");
   const [detail, setDetail] = useState<Asset | null>(null);
   const [openSwap, setOpenSwap] = useState(false);
+  const [lifecycle, setLifecycle] = useState<Asset | null>(null);
+  const unallocated = assets.filter(asset=>isActiveAsset(asset)&&!asset.holderId);
+  const deactivated = assets.filter(asset=>!isActiveAsset(asset));
 
   const filtered = useMemo(() => {
     const query = q.trim().toLowerCase();
     return assets
+      .filter(a=>mode==="unallocated"?isActiveAsset(a)&&!a.holderId:mode==="deactivated"?!isActiveAsset(a):true)
       .filter((a) => (kind === "all" ? true : a.kind === kind))
       .filter((a) => {
         if (holder === "all") return true;
-        if (holder === "store") return !a.holderId && a.status !== "condemned";
+        if (holder === "store") return !a.holderId && isActiveAsset(a);
         return a.holderId === holder;
       })
       .filter((a) => {
@@ -66,7 +75,7 @@ function AssetsPage() {
           .includes(query);
       })
       .sort((a, b) => a.assetNo.localeCompare(b.assetNo));
-  }, [assets, kind, holder, q, people]);
+  }, [assets, mode, kind, holder, q, people]);
 
   const user=useSession(s=>s.user)!;
   if(user.role === "employee")return <div className="space-y-6"><MyAssets/><AssetRequests/></div>;
@@ -78,10 +87,10 @@ function AssetsPage() {
         description="Maintain ASR, description, make, ID, room and allocation for computers, air conditioners and furniture."
         actions={
           <>
-            <Button variant="outline" disabled={user.role !== "admin"} onClick={() => setOpenSwap(true)}>
+            {user.role === "admin" && <Button variant="outline" onClick={() => setOpenSwap(true)}>
               <ArrowLeftRight className="size-4" />
               Swap two
-            </Button>
+            </Button>}
             <Button onClick={() => setEditing("new")}>
               <Plus className="size-4" />
               Add asset
@@ -91,10 +100,12 @@ function AssetsPage() {
       />
 
       <div className="flex flex-col gap-3">
-        <Tabs value={mode} onValueChange={(v) => setMode(v as "audit" | "register")}>
-          <TabsList>
+        <Tabs value={mode} onValueChange={value => {setMode(value as AssetView);setHolder("all");void navigate({search:{view:value==="register"?undefined:value}});}}>
+          <TabsList className="h-auto flex-wrap justify-start">
             <TabsTrigger value="audit">Audit</TabsTrigger>
-            <TabsTrigger value="register">All assets</TabsTrigger>
+            <TabsTrigger value="register">All assets ({assets.length})</TabsTrigger>
+            <TabsTrigger value="unallocated">Unallocated ({unallocated.length})</TabsTrigger>
+            <TabsTrigger value="deactivated">Deactivated ({deactivated.length})</TabsTrigger>
           </TabsList>
         </Tabs>
         <div className={mode === "audit" ? "hidden" : "flex flex-col gap-3 sm:flex-row"}>
@@ -105,7 +116,7 @@ function AssetsPage() {
             className="sm:flex-1"
           />
           <select aria-label="Filter asset type" className="h-10 rounded-xl border bg-card px-3 text-sm" value={kind} onChange={e=>setKind(e.target.value)}><option value="all">All kinds</option>{kinds.map(k=><option value={k} key={k}>{k}</option>)}</select>
-          <Select value={holder} onValueChange={setHolder}>
+          {mode === "register" && <Select value={holder} onValueChange={setHolder}>
             <SelectTrigger className="sm:w-52">
               <SelectValue placeholder="Holder" />
             </SelectTrigger>
@@ -120,7 +131,7 @@ function AssetsPage() {
                   </SelectItem>
                 ))}
             </SelectContent>
-          </Select>
+          </Select>}
         </div>
       </div>
 
@@ -129,8 +140,8 @@ function AssetsPage() {
       ) : filtered.length === 0 ? (
         <EmptyState
           icon={MonitorSmartphone}
-          title="No assets match"
-          hint="Add assets using their ASR and identification details."
+          title={mode==="deactivated"?"No deactivated assets match":mode==="unallocated"?"No unallocated assets match":"No assets match"}
+          hint={mode==="deactivated"?"Deactivated assets remain here with their history.":"Add assets using their ASR and identification details."}
           action={
             <Button onClick={() => setEditing("new")}>
               <Plus className="size-4" />
@@ -140,7 +151,7 @@ function AssetsPage() {
         />
       ) : (
         <>
-          <div className="hidden overflow-hidden rounded-xl bg-card shadow-[var(--shadow-border)] md:block">
+          <div className="hidden overflow-x-auto rounded-xl bg-card shadow-[var(--shadow-border)] md:block">
             <table className="w-full text-sm">
               <thead className="border-b border-border bg-muted/60 text-left text-xs tracking-wide text-muted-foreground uppercase">
                 <tr>
@@ -166,7 +177,7 @@ function AssetsPage() {
                       <p className="text-xs text-muted-foreground">ASR {asset.asr || "—"}</p>
                     </td>
                     <td className="px-4 py-3">
-                      <ItemIcon name={asset.kind} className="mr-2 inline size-4"/>{asset.kind} · {asset.make} {asset.model}
+                      <div className="flex items-center gap-3"><ItemIcon name={asset.kind} badge className="size-10"/><span className="item-description">{asset.kind} · {asset.make} {asset.model}</span></div>
                     </td>
                     <td className="px-4 py-3">{personName(people, asset.holderId)}</td>
                     <td className="px-4 py-3 text-muted-foreground">{asset.location || "—"}</td>
@@ -175,9 +186,8 @@ function AssetsPage() {
                     </td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex justify-end gap-2">
-                        <Button size="sm" variant="outline" onClick={() => setTransfer(asset)}>
-                          Transfer
-                        </Button>
+                        {isActiveAsset(asset) && <Button size="sm" variant="outline" onClick={() => setTransfer(asset)}>Transfer</Button>}
+                        {asset.status !== 'condemned' && <Button size="sm" variant="outline" onClick={() => setLifecycle(asset)}>{asset.status === 'deactivated' ? 'Reactivate' : 'Deactivate'}</Button>}
                         <Button size="sm" variant="ghost" onClick={() => setEditing(asset)}>
                           Edit
                         </Button>
@@ -194,11 +204,11 @@ function AssetsPage() {
                 <Card>
                   <CardContent className="flex flex-col gap-3 p-4">
                     <div className="flex items-start justify-between gap-2">
-                      <button type="button" className="text-left" onClick={() => setDetail(asset)}>
+                      <button type="button" className="flex min-w-0 items-start gap-3 text-left" onClick={() => setDetail(asset)}><ItemIcon name={asset.kind} badge className="size-10"/><span className="min-w-0 item-description">
                         <p className="font-mono font-medium">{asset.assetNo}</p>
                         <p className="text-sm text-muted-foreground">
                           {asset.kind} · {asset.make} {asset.model}
-                        </p>
+                        </p></span>
                       </button>
                       <AssetStatusBadge status={asset.status} />
                     </div>
@@ -207,9 +217,8 @@ function AssetsPage() {
                       {asset.location ? ` · ${asset.location}` : ""}
                     </p>
                     <div className="flex gap-2">
-                      <Button size="sm" className="flex-1" variant="outline" onClick={() => setTransfer(asset)}>
-                        Transfer
-                      </Button>
+                      {isActiveAsset(asset) && <Button size="sm" className="flex-1" variant="outline" onClick={() => setTransfer(asset)}>Transfer</Button>}
+                      {asset.status !== 'condemned' && <Button size="sm" variant="outline" onClick={() => setLifecycle(asset)}>{asset.status === 'deactivated' ? 'Reactivate' : 'Deactivate'}</Button>}
                       <Button size="sm" variant="ghost" onClick={() => setEditing(asset)}>
                         Edit
                       </Button>
@@ -223,6 +232,7 @@ function AssetsPage() {
       )}
 
       <AssetRequests/>
+      {lifecycle && <AssetLifecycleDialog key={lifecycle.id+':'+lifecycle.status} asset={lifecycle} onClose={()=>setLifecycle(null)}/>}
       <AssetDialog
         asset={editing === "new" ? null : editing}
         open={editing !== null}
@@ -238,6 +248,8 @@ function AssetsPage() {
         }}
       />
       <AssetDetailDialog
+        canSwap={user.role === 'admin'}
+        onLifecycle={() => {if(detail)setLifecycle(detail);setDetail(null);}}
         asset={detail}
         onClose={() => setDetail(null)}
         onTransfer={() => {
@@ -281,7 +293,7 @@ function AssetDialog({
   const [material, setMaterial] = useState("");
   const [busy, setBusy] = useState(false);
   const user = useSession(s=>s.user)!;
-  const canAllocate = !asset || user.role === 'admin';
+  const canAllocate = !asset || (user.role === 'admin' && isActiveAsset(asset));
   const isAc = /air.?condition|^ac$/i.test(kind);
   const isFurniture = !/CPU|Monitor|Laptop|Printer|UPS|Scanner|Projector|Network switch/i.test(kind) && !isAc;
 
@@ -575,6 +587,8 @@ function SwapDialog({
 }
 
 function AssetDetailDialog({
+  onLifecycle,
+  canSwap,
   asset,
   onClose,
   onTransfer,
@@ -584,6 +598,8 @@ function AssetDetailDialog({
   onClose: () => void;
   onTransfer: () => void;
   onSwap: () => void;
+  canSwap: boolean;
+  onLifecycle: () => void;
 }) {
   const people = useRegister((s) => s.people);
   const events = useRegister((s) => s.events);
@@ -595,7 +611,7 @@ function AssetDetailDialog({
         {asset ? (
           <>
             <DialogHeader>
-              <DialogTitle className="font-mono">{asset.assetNo}</DialogTitle>
+              <div className="flex items-center gap-3"><ItemIcon name={asset.kind} badge className="size-12"/><DialogTitle className="item-description font-mono">{asset.assetNo}</DialogTitle></div>
               <DialogDescription>
                 {asset.kind} · {asset.make} {asset.model}
               </DialogDescription>
@@ -616,15 +632,16 @@ function AssetDetailDialog({
               <p>
                 <span className="text-muted-foreground">Updated</span> {formatDate(asset.updatedAt)}
               </p>
+              <AssetStatusBadge status={asset.status}/>
+              {asset.deactivationReason && <p className="text-muted-foreground">Last deactivation · {asset.deactivationReason}{asset.deactivatedAt ? ` · ${formatDateTime(asset.deactivatedAt)}` : ''}</p>}
               {asset.notes ? <p className="text-muted-foreground">{asset.notes}</p> : null}
             </div>
             <div className="flex gap-2">
-              <Button size="sm" onClick={onTransfer}>
-                Transfer
-              </Button>
-              <Button size="sm" variant="outline" onClick={onSwap}>
+              {isActiveAsset(asset) && <Button size="sm" onClick={onTransfer}>Transfer</Button>}
+              {asset.status !== 'condemned' && <Button size="sm" variant="outline" onClick={onLifecycle}>{asset.status === 'deactivated' ? 'Reactivate' : 'Deactivate'}</Button>}
+              {canSwap && isActiveAsset(asset) && <Button size="sm" variant="outline" onClick={onSwap}>
                 Swap
-              </Button>
+              </Button>}
             </div>
             <div>
               <p className="mb-2 text-xs tracking-wide text-muted-foreground uppercase">History</p>

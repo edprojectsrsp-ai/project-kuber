@@ -9,6 +9,50 @@ const employee = {personId:'p1',name:'Employee',role:'employee'};
 const incharge = {personId:'p_admin',name:'In-charge',role:'admin'};
 const act = (data,user,action,...args) => applyAction(data,user,action,args);
 
+test('store deactivation removes active custody, preserves history and allows explicit reactivation', () => {
+  const data=sampleRegister(),asset=data.assets.find(a=>a.holderId==='p1');
+  const original={assetNo:asset.assetNo,asr:asset.asr,location:asset.location,make:asset.make};
+  assert.throws(()=>act(data,employee,'deactivateAsset',asset.id,'Not authorised'),/storekeeper/);
+  assert.throws(()=>act(data,store,'deactivateAsset',asset.id,''),/reason/);
+  act(data,store,'deactivateAsset',asset.id,'Beyond economic repair');
+  assert.equal(asset.status,'deactivated');assert.equal(asset.holderId,null);
+  for(const [key,value] of Object.entries(original))assert.equal(asset[key],value);
+  assert.equal(asset.deactivationReason,'Beyond economic repair');
+  assert.equal(data.events[0].fromHolderId,'p1');assert.equal(data.events[0].type,'deactivated');
+  assert.ok(!visibleData(data,employee).assets.some(a=>a.id===asset.id));
+  assert.throws(()=>act(data,store,'transferAsset',asset.id,'p2','Invalid'),/deactivated/);
+  assert.throws(()=>act(data,incharge,'auditAssign',asset.id,'p2','101'),/deactivated/);
+  assert.throws(()=>act(data,store,'requestAssetChange',{assetId:asset.id,room:'101',reason:'Invalid'}),/deactivated/);
+  act(data,store,'updateAsset',asset.id,{notes:'Kept for spares',holderId:null,location:asset.location});
+  assert.equal(asset.status,'deactivated');assert.equal(asset.notes,'Kept for spares');
+  assert.throws(()=>act(data,store,'reactivateAsset',asset.id,''),/reason/);
+  act(data,store,'reactivateAsset',asset.id,'Repaired and inspected');
+  assert.equal(asset.status,'unallocated');assert.equal(asset.holderId,null);assert.equal(data.events[0].type,'reactivated');
+  assert.throws(()=>act(data,store,'reactivateAsset',asset.id,'Retry'),/Only a deactivated/);
+});
+
+test('deactivation cancels source changes and sends an unavailable replacement back to the store', () => {
+  const data=sampleRegister(),cpu=data.assets.find(a=>a.holderId==='p1'&&a.kind==='CPU'),replacement=data.assets.find(a=>!a.holderId&&a.kind==='CPU');
+  const change=act(data,employee,'requestAssetChange',{assetId:cpu.id,toHolderId:'p1',room:'101',reason:'Replace CPU',requestType:'Change of asset'});
+  act(data,store,'prepareAssetRequest',change,{toHolderId:'p1',room:'101',replacementId:replacement.id});
+  act(data,store,'deactivateAsset',replacement.id,'Failed inspection');
+  const request=data.assetRequests.find(r=>r.id===change);
+  assert.equal(request.status,'requested');assert.equal(request.replacementId,undefined);assert.match(request.resolutionNote,/replacement was deactivated/);
+  assert.throws(()=>act(data,incharge,'approveAssetRequest',change,'Invalid'),/prepare/);
+  assert.throws(()=>act(data,store,'prepareAssetRequest',change,{toHolderId:'p1',room:'101',replacementId:replacement.id}),/unallocated replacement/);
+  act(data,store,'deactivateAsset',cpu.id,'Taken out of service');
+  assert.equal(request.status,'cancelled');assert.match(request.resolutionNote,/Asset deactivated/);
+  assert.throws(()=>act(data,incharge,'approveAssetRequest',change,'Invalid'),/prepare/);
+});
+
+test('physical audits exclude inactive assets and record deactivation during an open audit', () => {
+  const data=sampleRegister(),first=data.assets[0],second=data.assets[1];
+  act(data,store,'deactivateAsset',first.id,'Archived');
+  act(data,store,'startAudit');assert.ok(!data.audit.baseline.some(a=>a.id===first.id));
+  act(data,store,'deactivateAsset',second.id,'Removed during audit');assert.equal(data.audit.results[second.id],'deactivated');assert.throws(()=>act(data,store,'markAudit',second.id,'verified'),/Inactive assets/);
+  assert.ok(data.assets.some(a=>a.id===second.id));
+});
+
 test('catalogue replacement retains history, cancels obsolete pending requests and runs once', () => {
   const data=sampleRegister(), oldItems=structuredClone(data.items), moves=structuredClone(data.moves);
   assert.equal(consumableDescriptions.length,71);
